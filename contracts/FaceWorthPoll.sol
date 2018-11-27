@@ -32,11 +32,7 @@ contract FaceWorthPoll {
     endingBlock = _endingBlock;
     participantsRequired = _participantsRequired;
     participantsCount = 0;
-    if (participantsRequired < MIN_PARTICIPANTS || participantsRequired > MAX_PARTICIPANTS) {
-      open = false;
-    } else {
-      open = true;
-    }
+    open = (participantsRequired >= MIN_PARTICIPANTS && participantsRequired <= MAX_PARTICIPANTS);
     prizeDistributed = false;
   }
 
