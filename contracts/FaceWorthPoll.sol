@@ -20,6 +20,7 @@ contract FaceWorthPoll {
   mapping(address=>bool) private evaluatedBy;
   uint private participantsRequired;
   address[] private participants;
+  address[] private winners;
 
   constructor(address _initiator, bytes32 _faceHash, uint _endingBlock, uint _participantsRequired) public {
     owner = msg.sender;
@@ -107,13 +108,12 @@ contract FaceWorthPoll {
       }
     }
 
-    address[] memory winners = findWinners(turningPoint, totalWorth, sortedParticipants);
+    findWinners(turningPoint, totalWorth, sortedParticipants);
 
-    distributePrize(winners);
+    distributePrize();
   }
 
-  function findWinners(uint _turningPoint, uint _totalWorth, address[] _sortedParticipants) private view returns (address[] winners_) {
-    address[] memory winners;
+  function findWinners(uint _turningPoint, uint _totalWorth, address[] memory _sortedParticipants) private {
     uint numOfWinners = participants.length / WINNERS_RETURN;
     uint index = 0;
     uint leftIndex = _turningPoint;
@@ -149,24 +149,24 @@ contract FaceWorthPoll {
         revert();
       }
     }
-    return winners;
   }
 
-  function distributePrize(address[] _winners) private prizeNotDistributed {
+  function distributePrize() private prizeNotDistributed {
+    require(winners.length > 0);
     prizeDistributed = true;
     uint totalPrize = STAKE * participants.length * DIST_PERCENTAGE / 100;
-    uint avgPrize = totalPrize / _winners.length;
+    uint avgPrize = totalPrize / winners.length;
     uint minPrize = (avgPrize + 2 * STAKE) / 3;
-    uint step = (avgPrize - minPrize) / (_winners.length / 2);
+    uint step = (avgPrize - minPrize) / (winners.length / 2);
     uint prize = minPrize;
-    for (uint q = _winners.length - 1; q > 0; q--) {
-      _winners[q].transfer(prize);
+    for (uint q = winners.length - 1; q > 0; q--) {
+      winners[q].transfer(prize);
       prize += step;
     }
   }
 
-  function sortParticipants() private view returns (address[] sortedParticipants_) {
-    address[] memory sortedParticipants;
+  function sortParticipants() private view returns (address[] memory sortedParticipants_) {
+    address[] memory sortedParticipants = new address[](participants.length);
     uint[101] memory count;
     for (uint i = 0; i < 101; i++) {
       count[i] = 0;
@@ -223,7 +223,7 @@ contract FaceWorthPoll {
     return participants.length * 100 / participantsRequired;
   }
 
-  function getTimePassed() external view returns (uint percentage_) {
+  function getTimeElapsed() external view returns (uint percentage_) {
     return (block.number - startingBlock) * 100 / (endingBlock - block.number);
   }
 
@@ -233,5 +233,9 @@ contract FaceWorthPoll {
 
   function getWorth(address _who) external view whenClosed returns (uint8 worth_) {
     return worthBy[_who];
+  }
+
+  function getWinners() external view whenClosed returns (address[] winners_) {
+    return winners;
   }
 }
