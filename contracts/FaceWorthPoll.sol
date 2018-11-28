@@ -4,9 +4,9 @@ contract FaceWorthPoll {
 
   uint constant STAKE = 100000000; // every participant stake 100 trx
   uint constant MIN_PARTICIPANTS = 10;
-  uint constant MAX_PARTICIPANTS = 500;
-  uint constant WINNERS_RETURN = 3;
-  uint constant RETAINED_PERCENTAGE = 10;
+  uint constant MAX_PARTICIPANTS = 100000;
+  uint constant WINNERS_RETURN = 3;   // DIST_PERCENTAGE * WINNERS_RETURN / 100 must be greater than 1,
+  uint constant DIST_PERCENTAGE = 90; // so that winners prize is greater than the STAKE
 
   address public owner; // owner should be FaceWorthPollFactory contract
   address public initiator; // initiator is the one who wants to get his/her own FaceWorth
@@ -16,13 +16,10 @@ contract FaceWorthPoll {
   bool public open;
   bool public prizeDistributed;
 
-  mapping(address=>uint8) private worthBook;
-  mapping(address=>bool) private evaluatedBook;
-  mapping(address=>uint) private diffBook;
+  mapping(address=>uint8) private worthBy;
+  mapping(address=>bool) private evaluatedBy;
   uint private participantsRequired;
   address[] private participants;
-  uint private participantsCount;
-
 
   constructor(address _initiator, bytes32 _faceHash, uint _endingBlock, uint _participantsRequired) public {
     owner = msg.sender;
@@ -31,7 +28,6 @@ contract FaceWorthPoll {
     startingBlock = block.number;
     endingBlock = _endingBlock;
     participantsRequired = _participantsRequired;
-    participantsCount = 0;
     open = (participantsRequired >= MIN_PARTICIPANTS && participantsRequired <= MAX_PARTICIPANTS);
     prizeDistributed = false;
   }
@@ -52,7 +48,7 @@ contract FaceWorthPoll {
   }
 
   modifier onlyOnce {
-    require (!evaluatedBook[msg.sender]);
+    require (!evaluatedBy[msg.sender]);
     _;
   }
 
@@ -64,11 +60,10 @@ contract FaceWorthPoll {
   function evaluate(uint8 _worth) payable external whenOpen onlyOnce {
     require(_worth >= 0 && _worth <=100);
     require(msg.value == STAKE);
-    participantsCount++;
-    worthBook[msg.sender] = _worth;
-    evaluatedBook[msg.sender] = true;
+    worthBy[msg.sender] = _worth;
+    evaluatedBy[msg.sender] = true;
     participants.push(msg.sender);
-    if (participantsCount >= participantsRequired) {
+    if (participants.length >= participantsRequired) {
       endPoll();
     } else {
       checkBlockNumber();
@@ -78,7 +73,7 @@ contract FaceWorthPoll {
   function checkBlockNumber() public whenOpen {
     if (block.number >= endingBlock) {
       open = false;
-      if (participantsCount < participantsRequired) {
+      if (participants.length < participantsRequired) {
         refund();
       }
     }
@@ -86,62 +81,133 @@ contract FaceWorthPoll {
 
   function endPoll() private {
     open = false;
-    buildDiffBook();
 
-    uint numOfWinners = participantsCount / WINNERS_RETURN;
-    uint[] memory winnersDiff;
-    address[] memory winners;
-    uint count = 0;
-    for(uint i = 0; i < participants.length; i++) {
-      if (count < numOfWinners) {
-        winners[count] = participants[i];
-        winnersDiff[count] = diffBook[participants[i]];
-        count++;
-      } else {
-        for (uint j = 0; j < numOfWinners; j++) {
-          if (winnersDiff[j] > diffBook[participants[i]]) {
-            winners[j] = participants[i];
-            winnersDiff[j] = diffBook[participants[i]];
-            break;
-          }
-        }
-      }
-    }
+    // sort the participants by their worth from low to high using Counting Sort
+    address[] memory sortedParticipants = sortParticipants();
 
-    //TODO how to distribute prize?
-    uint totalWinnersDiff = getTotal(winnersDiff);
-    uint avgDiff = totalWinnersDiff / numOfWinners;
-    uint totalPrize = STAKE * participantsCount * (100 - RETAINED_PERCENTAGE) / 100;
-    uint avgPrize = totalPrize / numOfWinners;
-    for (uint k = 0; k < numOfWinners; k++) {
-
-    }
-  }
-
-  function getTotal(uint[] a) private pure returns (uint total_) {
-    uint total = 0;
-    for (uint i = 0; i < a.length; i++) {
-      total += a[i];
-    }
-    return total;
-  }
-
-  function buildDiffBook() private {
     uint totalWorth = getTotalWorth();
-    for(uint i = 0; i < participants.length; i++) {
-      uint adjustedWorth = worthBook[participants[i]] * participants.length;
-      if (adjustedWorth > totalWorth) {
-        diffBook[participants[i]] = adjustedWorth - totalWorth;
-      } else {
-        diffBook[participants[i]] = totalWorth - adjustedWorth;
+    // find turning point where the right gives higher than average FaceWorth and the left lower
+    uint turningPoint = getTurningPoint(totalWorth, sortedParticipants);
+
+    // reverse those who give lower than average but the same FaceWorth so that the earlier participant is closer to the turning point
+    uint p = turningPoint - 1;
+    while (p > 0) {
+      uint start = p;
+      uint end = p;
+      while (worthBy[sortedParticipants[start]] == worthBy[sortedParticipants[end - 1]]) {
+        end = end - 1;
+      }
+      p = end - 1;
+      while (start > end) {
+        address tmp = sortedParticipants[start];
+        sortedParticipants[start] = sortedParticipants[end];
+        sortedParticipants[end] = tmp;
+        start--;
+        end++;
       }
     }
+
+    address[] memory winners = findWinners(turningPoint, totalWorth, sortedParticipants);
+
+    distributePrize(winners);
+  }
+
+  function findWinners(uint _turningPoint, uint _totalWorth, address[] _sortedParticipants) private view returns (address[] winners_) {
+    address[] memory winners;
+    uint numOfWinners = participants.length / WINNERS_RETURN;
+    uint index = 0;
+    uint leftIndex = _turningPoint;
+    uint rightIndex = _turningPoint;
+    if(worthBy[_sortedParticipants[_turningPoint]] == _totalWorth) {
+      winners[index] = _sortedParticipants[_turningPoint];
+      index++;
+      rightIndex++;
+    } else {
+      leftIndex--;
+    }
+    while (index < numOfWinners) {
+      uint rightDiff;
+      if (rightIndex < _sortedParticipants.length) {
+        rightDiff = worthBy[_sortedParticipants[rightIndex]] * participants.length - _totalWorth;
+      }
+      uint leftDiff;
+      if (leftIndex >= 0) {
+        leftDiff = _totalWorth - worthBy[_sortedParticipants[leftIndex]] * participants.length;
+      }
+      if (leftIndex < 0 && rightIndex < _sortedParticipants.length
+        || leftIndex >= 0 && rightIndex < _sortedParticipants.length && rightDiff <= leftDiff ) {
+        winners[index] = _sortedParticipants[rightIndex];
+        index++;
+        rightIndex++;
+      } else if (leftIndex >=0 && rightIndex >= _sortedParticipants.length
+        || leftIndex >= 0 && rightIndex < _sortedParticipants.length && rightDiff > leftDiff) {
+        winners[index] = _sortedParticipants[leftIndex];
+        index++;
+        leftIndex--;
+      } else {
+        // should never be here, otherwise it's a bug!
+        revert();
+      }
+    }
+    return winners;
+  }
+
+  function distributePrize(address[] _winners) private {
+    uint totalPrize = STAKE * participants.length * DIST_PERCENTAGE / 100;
+    uint avgPrize = totalPrize / _winners.length;
+    uint minPrize = (avgPrize + 2 * STAKE) / 3;
+    uint step = (avgPrize - minPrize) / (_winners.length / 2);
+    uint prize = minPrize;
+    for (uint q = _winners.length - 1; q > 0; q--) {
+      _winners[q].transfer(prize);
+      prize += step;
+    }
+  }
+
+  function sortParticipants() private view returns (address[] sortedParticipants_) {
+    address[] memory sortedParticipants;
+    uint[101] memory count;
+    for (uint i = 0; i < 101; i++) {
+      count[i] = 0;
+    }
+    for (uint j = 0; j < participants.length; j++) {
+      count[worthBy[participants[j]]]++;
+    }
+    for (uint k = 1; k < 101; k++) {
+      count[k] += count[k-1];
+    }
+    for (uint m = participants.length-1; m >= 0; m--) {
+      sortedParticipants[count[worthBy[participants[m]]] - 1] = participants[m];
+      count[worthBy[participants[m]]]--;
+    }
+
+    // find turning point where the right gives higher than average FaceWorth and the left lower
+    uint totalWorth = getTotalWorth();
+    uint turningPoint;
+    for (uint n = 0; n < sortedParticipants.length; n++) {
+      if (worthBy[sortedParticipants[n]] * participants.length >= totalWorth) {
+        turningPoint = n;
+        break;
+      }
+    }
+    return sortedParticipants;
+  }
+
+  function getTurningPoint(uint _totalWorth, address[] _sortedParticipants) private view returns (uint turningPoint_) {
+    uint turningPoint;
+    for (uint n = 0; n < _sortedParticipants.length; n++) {
+      if (worthBy[_sortedParticipants[n]] * participants.length >= _totalWorth) {
+        turningPoint = n;
+        break;
+      }
+    }
+    return turningPoint;
   }
 
   function getTotalWorth() private view returns (uint totalWorth_) {
     uint total = 0;
     for(uint i = 0; i < participants.length; i++) {
-      total += worthBook[participants[i]];
+      total += worthBy[participants[i]];
     }
     return total;
   }
@@ -153,7 +219,7 @@ contract FaceWorthPoll {
   }
 
   function getParticipationProgress() external view returns (uint percentage_) {
-    return participantsCount * 100 / participantsRequired;
+    return participants.length * 100 / participantsRequired;
   }
 
   function getTimePassed() external view returns (uint percentage_) {
@@ -165,6 +231,6 @@ contract FaceWorthPoll {
   }
 
   function getWorth(address _who) external view whenClosed returns (uint8 worth_) {
-    return worthBook[_who];
+    return worthBy[_who];
   }
 }
