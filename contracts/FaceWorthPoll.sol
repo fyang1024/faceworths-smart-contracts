@@ -152,7 +152,8 @@ contract FaceWorthPoll {
     return winners;
   }
 
-  function distributePrize(address[] _winners) private {
+  function distributePrize(address[] _winners) private prizeNotDistributed {
+    prizeDistributed = true;
     uint totalPrize = STAKE * participants.length * DIST_PERCENTAGE / 100;
     uint avgPrize = totalPrize / _winners.length;
     uint minPrize = (avgPrize + 2 * STAKE) / 3;
