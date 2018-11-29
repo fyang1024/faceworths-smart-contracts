@@ -166,7 +166,7 @@ contract FaceWorthPoll {
   }
 
   function sortParticipants() private view returns (address[] memory sortedParticipants_) {
-    address[] memory sortedParticipants = new address[](participants.length);
+    sortedParticipants_ = new address[](participants.length);
     uint[101] memory count;
     for (uint i = 0; i < 101; i++) {
       count[i] = 0;
@@ -178,39 +178,26 @@ contract FaceWorthPoll {
       count[k] += count[k-1];
     }
     for (uint m = participants.length-1; m >= 0; m--) {
-      sortedParticipants[count[worthBy[participants[m]]] - 1] = participants[m];
+      sortedParticipants_[count[worthBy[participants[m]]] - 1] = participants[m];
       count[worthBy[participants[m]]]--;
     }
-
-    // find turning point where the right gives higher than average FaceWorth and the left lower
-    uint totalWorth = getTotalWorth();
-    uint turningPoint;
-    for (uint n = 0; n < sortedParticipants.length; n++) {
-      if (worthBy[sortedParticipants[n]] * participants.length >= totalWorth) {
-        turningPoint = n;
-        break;
-      }
-    }
-    return sortedParticipants;
   }
 
   function getTurningPoint(uint _totalWorth, address[] _sortedParticipants) private view returns (uint turningPoint_) {
-    uint turningPoint;
+    turningPoint_;
     for (uint n = 0; n < _sortedParticipants.length; n++) {
       if (worthBy[_sortedParticipants[n]] * participants.length >= _totalWorth) {
-        turningPoint = n;
+        turningPoint_ = n;
         break;
       }
     }
-    return turningPoint;
   }
 
   function getTotalWorth() private view returns (uint totalWorth_) {
-    uint total = 0;
+    totalWorth_ = 0;
     for(uint i = 0; i < participants.length; i++) {
-      total += worthBy[participants[i]];
+      totalWorth_ += worthBy[participants[i]];
     }
-    return total;
   }
 
   function refund() private {
@@ -220,23 +207,23 @@ contract FaceWorthPoll {
   }
 
   function getParticipationProgress() external view returns (uint percentage_) {
-    return participants.length * 100 / participantsRequired;
+    percentage_ = participants.length * 100 / participantsRequired;
   }
 
   function getTimeElapsed() external view returns (uint percentage_) {
-    return (block.number - startingBlock) * 100 / (endingBlock - block.number);
+    percentage_ = (block.number - startingBlock) * 100 / (endingBlock - block.number);
   }
 
   function getParticipants() external view whenClosed returns (address[] participants_) {
-    return participants;
+    participants_ = participants;
   }
 
   function getWorth(address _who) external view whenClosed returns (uint8 worth_) {
-    return worthBy[_who];
+    worth_ = worthBy[_who];
   }
 
   function getWinners() external view whenClosed returns (address[] winners_) {
-    return winners;
+    winners_ = winners;
   }
 
   function () public payable {
