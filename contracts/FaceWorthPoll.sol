@@ -5,10 +5,9 @@ contract FaceWorthPoll {
   uint constant STAKE = 100000000; // every participant stake 100 trx
   uint constant MIN_PARTICIPANTS = 10;
   uint constant MAX_PARTICIPANTS = 100000;
-  uint constant WINNERS_RETURN = 3;   // DIST_PERCENTAGE * WINNERS_RETURN must be greater than 100,
+  uint constant WINNERS_RETURN = 3;   // WINNERS_RETURN * DIST_PERCENTAGE must be greater than 100,
   uint constant DIST_PERCENTAGE = 90; // so that winners prize is greater than the STAKE
 
-  address public owner; // owner should be FaceWorthPollFactory contract
   address public initiator; // initiator is the one who wants to get his/her own FaceWorth
   bytes32 public faceHash; // face photo's SHA-256 hash
   uint public startingBlock;
@@ -23,7 +22,6 @@ contract FaceWorthPoll {
   address[] private winners;
 
   constructor(address _initiator, bytes32 _faceHash, uint _endingBlock, uint _participantsRequired) public {
-    owner = msg.sender;
     initiator = _initiator;
     faceHash = _faceHash;
     startingBlock = block.number;
@@ -40,11 +38,6 @@ contract FaceWorthPoll {
 
   modifier whenClosed {
     require (!open);
-    _;
-  }
-
-  modifier onlyOwner {
-    require (msg.sender == owner);
     _;
   }
 
