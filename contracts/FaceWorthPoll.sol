@@ -5,7 +5,7 @@ contract FaceWorthPoll {
   uint constant STAKE = 100000000; // every participant stake 100 trx
   uint constant MIN_PARTICIPANTS = 10;
   uint constant MAX_PARTICIPANTS = 100000;
-  uint constant WINNERS_RETURN = 3;   // DIST_PERCENTAGE * WINNERS_RETURN / 100 must be greater than 1,
+  uint constant WINNERS_RETURN = 3;   // DIST_PERCENTAGE * WINNERS_RETURN must be greater than 100,
   uint constant DIST_PERCENTAGE = 90; // so that winners prize is greater than the STAKE
 
   address public owner; // owner should be FaceWorthPollFactory contract
@@ -237,5 +237,9 @@ contract FaceWorthPoll {
 
   function getWinners() external view whenClosed returns (address[] winners_) {
     return winners;
+  }
+
+  function () public payable {
+    revert();
   }
 }
