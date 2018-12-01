@@ -2,47 +2,63 @@ pragma solidity ^0.4.24;
 
 contract FaceWorthPoll {
 
-  uint constant STAKE = 100000000; // every participant stake 100 trx
-  uint constant MIN_PARTICIPANTS = 10;
-  uint constant MAX_PARTICIPANTS = 100000;
-  uint constant WINNERS_RETURN = 3;   // WINNERS_RETURN * DIST_PERCENTAGE must be greater than 100,
-  uint constant DIST_PERCENTAGE = 90; // so that winners prize is greater than the STAKE
+  uint public stake;
+  uint public winnersReturn;
+  uint public distPercentage;
 
   address public initiator; // initiator is the one who wants to get his/her own FaceWorth
   bytes32 public faceHash; // face photo's SHA-256 hash
   uint public startingBlock;
-  uint public endingBlock;
-  bool public open;
+  uint public commitEndingBlock;
+  uint public revealEndingBlock;
   bool public prizeDistributed;
 
+  mapping(address=>bytes32) private saltedWorthHashBy;
   mapping(address=>uint8) private worthBy;
-  mapping(address=>bool) private evaluatedBy;
+  mapping(address=>bool) private scoredBy;
   uint private participantsRequired;
   address[] private participants;
   address[] private winners;
 
-  constructor(address _initiator, bytes32 _faceHash, uint _endingBlock, uint _participantsRequired) public {
+  constructor(
+    address _initiator,
+    bytes32 _faceHash,
+    uint _blocksBeforeReveal,
+    uint _blocksBeforeEnd,
+    uint _participantsRequired,
+    uint _stake,
+    uint _winnersReturn,
+    uint _distPercentage
+  ) public {
     initiator = _initiator;
     faceHash = _faceHash;
     startingBlock = block.number;
-    endingBlock = _endingBlock;
+    commitEndingBlock = startingBlock + _blocksBeforeReveal;
+    revealEndingBlock = commitEndingBlock + _blocksBeforeEnd;
     participantsRequired = _participantsRequired;
-    open = (participantsRequired >= MIN_PARTICIPANTS && participantsRequired <= MAX_PARTICIPANTS);
+    stake = _stake;
+    winnersReturn = _winnersReturn;
+    distPercentage = _distPercentage;
     prizeDistributed = false;
   }
 
-  modifier whenOpen {
-    require (open);
+  modifier committing {
+    require (block.number <= commitEndingBlock);
     _;
   }
 
-  modifier whenClosed {
-    require (!open);
+  modifier revealing {
+    require (block.number > commitEndingBlock && block.number <= revealEndingBlock);
+    _;
+  }
+
+  modifier revealed {
+    require (block.number > revealEndingBlock);
     _;
   }
 
   modifier onlyOnce {
-    require (!evaluatedBy[msg.sender]);
+    require (!scoredBy[msg.sender]);
     _;
   }
 
@@ -51,22 +67,20 @@ contract FaceWorthPoll {
     _;
   }
 
-  function evaluate(uint8 _worth) payable external whenOpen onlyOnce {
-    require(_worth >= 0 && _worth <=100);
-    require(msg.value == STAKE);
-    worthBy[msg.sender] = _worth;
-    evaluatedBy[msg.sender] = true;
+  function commit(bytes32 _saltedWorthHash) payable external committing onlyOnce {
+    require(msg.value == stake);
+    saltedWorthHashBy[msg.sender] = _saltedWorthHash;
+    scoredBy[msg.sender] = true;
     participants.push(msg.sender);
-    if (participants.length >= participantsRequired) {
-      endPoll();
-    } else {
-      checkBlockNumber();
-    }
   }
 
-  function checkBlockNumber() public whenOpen {
-    if (block.number >= endingBlock) {
-      open = false;
+  function reveal(uint8 _worth, bytes32 _salt) external revealing {
+    require(saltedWorthHashBy[msg.sender] != keccak256(abi.encodePacked(_worth, salt)));
+    worthBy[msg.sender] = _worth;
+  }
+
+  function checkBlockNumber() public {
+    if (block.number > commitEndingBlock) {
       if (participants.length < participantsRequired) {
         refund();
       }
@@ -74,7 +88,6 @@ contract FaceWorthPoll {
   }
 
   function endPoll() private {
-    open = false;
 
     // sort the participants by their worth from low to high using Counting Sort
     address[] memory sortedParticipants = sortParticipants();
@@ -107,7 +120,7 @@ contract FaceWorthPoll {
   }
 
   function findWinners(uint _turningPoint, uint _totalWorth, address[] memory _sortedParticipants) private {
-    uint numOfWinners = participants.length / WINNERS_RETURN;
+    uint numOfWinners = participants.length / winnersReturn;
     uint index = 0;
     uint leftIndex = _turningPoint;
     uint rightIndex = _turningPoint;
@@ -147,9 +160,9 @@ contract FaceWorthPoll {
   function distributePrize() private prizeNotDistributed {
     require(winners.length > 0);
     prizeDistributed = true;
-    uint totalPrize = STAKE * participants.length * DIST_PERCENTAGE / 100;
+    uint totalPrize = stake * participants.length * distPercentage / 100;
     uint avgPrize = totalPrize / winners.length;
-    uint minPrize = (avgPrize + 2 * STAKE) / 3;
+    uint minPrize = (avgPrize + 2 * stake) / 3;
     uint step = (avgPrize - minPrize) / (winners.length / 2);
     uint prize = minPrize;
     for (uint q = winners.length - 1; q > 0; q--) {
@@ -195,7 +208,7 @@ contract FaceWorthPoll {
 
   function refund() private {
     for (uint i = 0; i < participants.length; i++) {
-      participants[i].transfer(STAKE);
+      participants[i].transfer(stake);
     }
   }
 
@@ -204,18 +217,18 @@ contract FaceWorthPoll {
   }
 
   function getTimeElapsed() external view returns (uint percentage_) {
-    percentage_ = (block.number - startingBlock) * 100 / (endingBlock - block.number);
+    percentage_ = (block.number - startingBlock) * 100 / (commitEndingBlock - block.number);
   }
 
-  function getParticipants() external view whenClosed returns (address[] participants_) {
+  function getParticipants() external view returns (address[] participants_) {
     participants_ = participants;
   }
 
-  function getWorth(address _who) external view whenClosed returns (uint8 worth_) {
+  function getWorth(address _who) external view returns (uint8 worth_) {
     worth_ = worthBy[_who];
   }
 
-  function getWinners() external view whenClosed returns (address[] winners_) {
+  function getWinners() external view returns (address[] winners_) {
     winners_ = winners;
   }
 
