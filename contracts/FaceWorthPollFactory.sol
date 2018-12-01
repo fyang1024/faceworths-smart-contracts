@@ -2,8 +2,12 @@ pragma solidity ^0.4.24;
 
 import "./Owned.sol";
 import "./FaceWorthPoll.sol";
+import "./FaceToken.sol";
 
 contract FaceWorthPollFactory is Owned {
+
+  // TODO !!IMPORTANT!! UPDATE THE ADDRESS ONCE THE FACETOKEN CONTRACT IS DEPLOYED
+  address public constant faceTokenAddress = 0x0;
 
   mapping(address=>bool) deployed;
 
@@ -31,6 +35,11 @@ contract FaceWorthPollFactory is Owned {
         faceWorthPoll.startingBlock(),
         faceWorthPoll.endingBlock()
     );
+    FaceToken faceToken = FaceToken(faceTokenAddress);
+    if(faceToken.allowance(faceToken.initialVault(), address(this)) > 0) {
+      // pay 1 FACE token once user starts a new game
+      faceToken.transferFrom(faceToken.initialVault(), faceWorthPoll.initiator(), 10**faceToken.decimals());
+    }
   }
 
   function getNumberOfPolls() public view returns (uint n_) {
