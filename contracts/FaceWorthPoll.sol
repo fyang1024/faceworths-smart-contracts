@@ -162,10 +162,24 @@ contract FaceWorthPoll {
       distributePrize();
     }
     FaceWorthPollFactory factory = FaceWorthPollFactory(factoryAddress);
-    factory.rewardFaceTokens(initiator, oneFace + oneFace * participants.length / 10);
-    for (uint i = 0; i < participants.length; i++) {
-      if(!wonBy[participants[i]]) {
-        factory.rewardFaceTokens(participants[i], oneFace / 10);
+    if (factory.faceTokenRewardPool() > 0) {
+      uint initiatorReward = oneFace + oneFace * participants.length / 10;
+      if (factory.faceTokenRewardPool() < initiatorReward) {
+        initiatorReward = factory.faceTokenRewardPool();
+      }
+      factory.rewardFaceTokens(initiator, initiatorReward);
+      if (factory.faceTokenRewardPool() > 0) {
+        uint participantReward = oneFace / 10;
+        for (uint i = 0; i < participants.length; i++) {
+          if(!wonBy[participants[i]]) {
+            if (factory.faceTokenRewardPool() < participantReward) {
+              factory.rewardFaceTokens(participants[i], factory.faceTokenRewardPool());
+              break;
+            } else {
+              factory.rewardFaceTokens(participants[i], participantReward);
+            }
+          }
+        }
       }
     }
     emit StageChange(currentStage, Stage.REVEALING);

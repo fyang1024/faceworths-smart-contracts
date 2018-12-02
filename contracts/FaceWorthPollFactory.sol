@@ -3,8 +3,11 @@ pragma solidity ^0.4.24;
 import "./Owned.sol";
 import "./FaceWorthPoll.sol";
 import "./FaceToken.sol";
+import "./SafeMath.sol";
 
 contract FaceWorthPollFactory is Owned {
+
+  using SafeMath for uint256;
 
   uint public stake = 100000000; // every participant stake 100 trx
   uint public minParticipants = 3;
@@ -13,6 +16,7 @@ contract FaceWorthPollFactory is Owned {
   uint public distPercentage = 90; // so that winners prize is greater than the stake
   uint public minBlocksBeforeReveal = 100; // 100 blocks is about 300 seconds or 5 minutes
   uint public minBlocksBeforeEnd = 100;
+  uint256 public faceTokenRewardPool;
 
   // TODO !!IMPORTANT!! UPDATE THE ADDRESS ONCE THE FACETOKEN CONTRACT IS DEPLOYED
   address public constant faceTokenAddress = 0x0;
@@ -20,6 +24,11 @@ contract FaceWorthPollFactory is Owned {
   mapping(address => bool) deployed;
 
   address[] deployedPolls;
+
+  constructor() public {
+    FaceToken faceToken = FaceToken(faceTokenAddress);
+    faceTokenRewardPool = faceToken.totalSupply() * 80 / 100;
+  }
 
   event FaceWorthPollDeployed (
     address indexed contractAddress,
@@ -72,6 +81,7 @@ contract FaceWorthPollFactory is Owned {
     require(deployed[msg.sender]);
     FaceToken faceToken = FaceToken(faceTokenAddress);
     faceToken.increaseApproval(_receiver, _value);
+    faceTokenRewardPool = faceTokenRewardPool.sub(_value);
   }
 
   function getNumberOfPolls() public view returns (uint n_) {
