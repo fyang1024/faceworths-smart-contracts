@@ -245,23 +245,38 @@ contract FaceWorthPoll {
     }
   }
 
-  function getParticipationProgress() external view returns (uint percentage_) {
-    percentage_ = participants.length * 100 / participantsRequired;
+  function getCommitTimeElapsed() external view returns (uint percentage_) {
+    percentage_ = (block.number - startingBlock) * 100 / (commitEndingBlock - startingBlock);
   }
 
-  function getCommitTimeElapsed() external view returns (uint percentage_) {
-    percentage_ = (block.number - startingBlock) * 100 / (commitEndingBlock - block.number);
+  function getRevealTimeElapsed() external view returns (uint percentage_) {
+    if (block.number < commitEndingBlock) {
+      percentage_ = 0;
+    } else {
+      percentage_ = (block.number - commitEndingBlock - 1) * 100 / (revealEndingBlock - commitEndingBlock - 1);
+    }
+  }
+
+  function getNumberOfParticipants() external view onlyInitiator returns (uint n_) {
+    n_ = participants.length;
+  }
+
+  function getParticipantsRequired() external view onlyInitiator returns (uint n_) {
+    n_ = participantsRequired;
   }
 
   function getParticipants() external view returns (address[] participants_) {
+    require (currentStage != Stage.COMMITTING && currentStage != Stage.CANCELLED);
     participants_ = participants;
   }
 
   function getWorth(address _who) external view returns (uint8 worth_) {
+    require (currentStage == Stage.ENDED);
     worth_ = worthBy[_who];
   }
 
   function getWinners() external view returns (address[] winners_) {
+    require (currentStage == Stage.ENDED);
     winners_ = winners;
   }
 

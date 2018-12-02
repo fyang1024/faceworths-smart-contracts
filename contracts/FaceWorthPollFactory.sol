@@ -21,6 +21,7 @@ contract FaceWorthPollFactory is Owned {
   address[] deployedPolls;
 
   event FaceWorthPollDeployed (
+    address indexed contractAddress,
     address indexed initiator,
     bytes32 faceHash,
     uint startingBlock,
@@ -34,8 +35,8 @@ contract FaceWorthPollFactory is Owned {
     uint _blocksBeforeEnd,
     uint _participantsRequired
   )
-  public
-  returns (address contractAddress)
+    public
+    returns (address contractAddress)
   {
     require(_blocksBeforeReveal >= minBlocksBeforeReveal);
     require(_blocksBeforeEnd >= minBlocksBeforeEnd);
@@ -45,6 +46,7 @@ contract FaceWorthPollFactory is Owned {
     deployedPolls.push(contractAddress);
     FaceWorthPoll faceWorthPoll = FaceWorthPoll(contractAddress);
     emit FaceWorthPollDeployed(
+      contractAddress,
       faceWorthPoll.initiator(),
       faceWorthPoll.faceHash(),
       faceWorthPoll.startingBlock(),
