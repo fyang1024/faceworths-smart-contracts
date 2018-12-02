@@ -24,37 +24,38 @@ contract FaceWorthPollFactory is Owned {
     address indexed initiator,
     bytes32 faceHash,
     uint startingBlock,
-    uint endingBlock
+    uint commitEndingBlock,
+    uint revealEndingBlock
   );
 
   function deployFaceWorthPoll (
     bytes32 _faceHash,
-    uint _endingBlock,
     uint _blocksBeforeReveal,
     uint _blocksBeforeEnd,
     uint _participantsRequired
   )
-    public
-    returns (address contractAddress)
+  public
+  returns (address contractAddress)
   {
     require(_blocksBeforeReveal >= minBlocksBeforeReveal);
     require(_blocksBeforeEnd >= minBlocksBeforeEnd);
     require(_participantsRequired >= minParticipants && _participantsRequired <= maxParticipants);
-    contractAddress = new FaceWorthPoll(msg.sender, _faceHash, _endingBlock, _participantsRequired, stake, winnersReturn, distPercentage);
+    contractAddress = new FaceWorthPoll(msg.sender, _faceHash, _blocksBeforeReveal, _blocksBeforeEnd, _participantsRequired, stake, winnersReturn, distPercentage);
     deployed[contractAddress] = true;
     deployedPolls.push(contractAddress);
     FaceWorthPoll faceWorthPoll = FaceWorthPoll(contractAddress);
     emit FaceWorthPollDeployed(
-        faceWorthPoll.initiator(),
-        faceWorthPoll.faceHash(),
-        faceWorthPoll.startingBlock(),
-        faceWorthPoll.endingBlock()
+      faceWorthPoll.initiator(),
+      faceWorthPoll.faceHash(),
+      faceWorthPoll.startingBlock(),
+      faceWorthPoll.commitEndingBlock(),
+      faceWorthPoll.revealEndingBlock()
     );
-//    FaceToken faceToken = FaceToken(faceTokenAddress);
-//    if(faceToken.allowance(faceToken.initialVault(), address(this)) > 0) {
-//      // pay 1 FACE token once user starts a new game
-//      faceToken.transferFrom(faceToken.initialVault(), faceWorthPoll.initiator(), 10**faceToken.decimals());
-//    }
+    //    FaceToken faceToken = FaceToken(faceTokenAddress);
+    //    if(faceToken.allowance(faceToken.initialVault(), address(this)) > 0) {
+    //      // pay 1 FACE token once user starts a new game
+    //      faceToken.transferFrom(faceToken.initialVault(), faceWorthPoll.initiator(), 10**faceToken.decimals());
+    //    }
   }
 
   function getNumberOfPolls() public view returns (uint n_) {
@@ -66,7 +67,8 @@ contract FaceWorthPollFactory is Owned {
     address initiator,
     bytes32 faceHash,
     uint    startingBlock,
-    uint    endingBlock
+    uint    commitEndingBlock,
+    uint    revealEndingBlock
   ) {
     valid = deployed[contractAddress];
     if (valid) {
@@ -74,7 +76,8 @@ contract FaceWorthPollFactory is Owned {
       initiator  = poll.initiator();
       faceHash = poll.faceHash();
       startingBlock = poll.startingBlock();
-      endingBlock = poll.endingBlock();
+      commitEndingBlock = poll.commitEndingBlock();
+      revealEndingBlock = poll.revealEndingBlock();
     }
   }
 
@@ -82,7 +85,7 @@ contract FaceWorthPollFactory is Owned {
     require(_stake != stake);
     uint oldStake = stake;
     stake = _stake;
-    emit StakeUpdated(stake, oldStake);
+    emit StakeUpdate(stake, oldStake);
   }
 
   function updateParticipantsRange(uint _minParticipants, uint _maxParticipants) external onlyOwner {
@@ -91,7 +94,7 @@ contract FaceWorthPollFactory is Owned {
     if (_minParticipants != minParticipants) {
       uint oldMinParticipants = minParticipants;
       minParticipants = _minParticipants;
-      emit MinParticipantsUpdate(minParticipants, oldMaxParticipants);
+      emit MinParticipantsUpdate(minParticipants, oldMinParticipants);
     }
     if (_maxParticipants != maxParticipants) {
       uint oldMaxParticipants = maxParticipants;

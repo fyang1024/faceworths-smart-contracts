@@ -11,14 +11,19 @@ contract FaceWorthPoll {
   uint public startingBlock;
   uint public commitEndingBlock;
   uint public revealEndingBlock;
-  bool public prizeDistributed;
+  Stage public currentStage;
 
   mapping(address=>bytes32) private saltedWorthHashBy;
   mapping(address=>uint8) private worthBy;
-  mapping(address=>bool) private scoredBy;
+  mapping(address=>bool) private committedBy;
+  mapping(address=>bool) private revealedBy;
+  mapping(address=>bool) private withdrawnBy;
   uint private participantsRequired;
   address[] private participants;
   address[] private winners;
+  uint revealCount;
+
+  enum Stage { COMMITTING, REVEALING, CANCELLED, ENDED }
 
   constructor(
     address _initiator,
@@ -39,88 +44,117 @@ contract FaceWorthPoll {
     stake = _stake;
     winnersReturn = _winnersReturn;
     distPercentage = _distPercentage;
-    prizeDistributed = false;
+    currentStage = Stage.COMMITTING;
+    revealCount = 0;
   }
 
-  modifier committing {
-    require (block.number <= commitEndingBlock);
+  modifier onlyInitiator {
+    require (msg.sender == initiator);
     _;
   }
 
-  modifier revealing {
-    require (block.number > commitEndingBlock && block.number <= revealEndingBlock);
+  modifier committedByMe {
+    require (committedBy[msg.sender]);
     _;
   }
 
-  modifier revealed {
-    require (block.number > revealEndingBlock);
+  modifier notCommittedByMe {
+    require (!committedBy[msg.sender]);
     _;
   }
 
-  modifier onlyOnce {
-    require (!scoredBy[msg.sender]);
+  modifier notRevealedByMe {
+    require (!revealedBy[msg.sender]);
     _;
   }
 
-  modifier prizeNotDistributed {
-    require (!prizeDistributed);
-    _;
-  }
-
-  function commit(bytes32 _saltedWorthHash) payable external committing onlyOnce {
-    require(msg.value == stake);
+  function commit(bytes32 _saltedWorthHash)
+    payable
+    external
+    notCommittedByMe
+  {
+    require(currentStage == Stage.COMMITTING && msg.value == stake);
     saltedWorthHashBy[msg.sender] = _saltedWorthHash;
-    scoredBy[msg.sender] = true;
+    committedBy[msg.sender] = true;
     participants.push(msg.sender);
   }
 
-  function reveal(uint8 _worth, bytes32 _salt) external revealing {
-    require(saltedWorthHashBy[msg.sender] != keccak256(abi.encodePacked(_worth, salt)));
+  function reveal(uint8 _worth, bytes32 _salt)
+    external
+    committedByMe
+    notRevealedByMe
+  {
+    require(currentStage == Stage.REVEALING && saltedWorthHashBy[msg.sender] != keccak256(abi.encodePacked(_worth, _salt)));
     worthBy[msg.sender] = _worth;
+    revealCount++;
   }
 
-  function checkBlockNumber() public {
-    if (block.number > commitEndingBlock) {
-      if (participants.length < participantsRequired) {
-        refund();
+  function withdraw() external {
+    require(currentStage == Stage.CANCELLED && committedBy[msg.sender] && !withdrawnBy[msg.sender]);
+    withdrawnBy[msg.sender] = true;
+    msg.sender.transfer(stake);
+  }
+
+  function cancel() external onlyInitiator {
+    require (currentStage == Stage.COMMITTING);
+    currentStage = Stage.CANCELLED;
+  }
+
+  // this function should be called every 3 seconds (Tron block time) by FacesWorths
+  function checkBlockNumber() external {
+    if (currentStage != Stage.CANCELLED && currentStage != Stage.ENDED) {
+      if (block.number > commitEndingBlock) {
+        if (participants.length < participantsRequired) {
+          currentStage = Stage.CANCELLED;
+        } else if (block.number <= revealEndingBlock) {
+          currentStage = Stage.REVEALING;
+        } else {
+          endPoll();
+        }
       }
     }
   }
 
   function endPoll() private {
 
-    // sort the participants by their worth from low to high using Counting Sort
-    address[] memory sortedParticipants = sortParticipants();
+    require(currentStage != Stage.ENDED);
+    currentStage = Stage.ENDED;
 
-    uint totalWorth = getTotalWorth();
-    // find turning point where the right gives higher than average FaceWorth and the left lower
-    uint turningPoint = getTurningPoint(totalWorth, sortedParticipants);
+    if (revealCount > 0) {
+      // sort the participants by their worth from low to high using Counting Sort
+      address[] memory sortedParticipants = sortParticipants();
 
-    // reverse those who give lower than average but the same FaceWorth so that the earlier participant is closer to the turning point
-    uint p = turningPoint - 1;
-    while (p > 0) {
-      uint start = p;
-      uint end = p;
-      while (worthBy[sortedParticipants[start]] == worthBy[sortedParticipants[end - 1]]) {
-        end = end - 1;
+      uint totalWorth = getTotalWorth();
+      // find turning point where the right gives higher than average FaceWorth and the left lower
+      uint turningPoint = getTurningPoint(totalWorth, sortedParticipants);
+
+      // reverse those who give lower than average but the same FaceWorth so that the earlier participant is closer to the turning point
+      uint p = turningPoint - 1;
+      while (p > 0) {
+        uint start = p;
+        uint end = p;
+        while (worthBy[sortedParticipants[start]] == worthBy[sortedParticipants[end - 1]]) {
+          end = end - 1;
+        }
+        p = end - 1;
+        while (start > end) {
+          address tmp = sortedParticipants[start];
+          sortedParticipants[start] = sortedParticipants[end];
+          sortedParticipants[end] = tmp;
+          start--;
+          end++;
+        }
       }
-      p = end - 1;
-      while (start > end) {
-        address tmp = sortedParticipants[start];
-        sortedParticipants[start] = sortedParticipants[end];
-        sortedParticipants[end] = tmp;
-        start--;
-        end++;
-      }
+
+      findWinners(turningPoint, totalWorth, sortedParticipants);
+
+      distributePrize();
     }
-
-    findWinners(turningPoint, totalWorth, sortedParticipants);
-
-    distributePrize();
   }
 
   function findWinners(uint _turningPoint, uint _totalWorth, address[] memory _sortedParticipants) private {
     uint numOfWinners = participants.length / winnersReturn;
+    if (numOfWinners > revealCount) numOfWinners = revealCount;
     uint index = 0;
     uint leftIndex = _turningPoint;
     uint rightIndex = _turningPoint;
@@ -157,9 +191,8 @@ contract FaceWorthPoll {
     }
   }
 
-  function distributePrize() private prizeNotDistributed {
+  function distributePrize() private {
     require(winners.length > 0);
-    prizeDistributed = true;
     uint totalPrize = stake * participants.length * distPercentage / 100;
     uint avgPrize = totalPrize / winners.length;
     uint minPrize = (avgPrize + 2 * stake) / 3;
@@ -172,20 +205,24 @@ contract FaceWorthPoll {
   }
 
   function sortParticipants() private view returns (address[] memory sortedParticipants_) {
-    sortedParticipants_ = new address[](participants.length);
+    sortedParticipants_ = new address[](revealCount);
     uint[101] memory count;
     for (uint i = 0; i < 101; i++) {
       count[i] = 0;
     }
     for (uint j = 0; j < participants.length; j++) {
-      count[worthBy[participants[j]]]++;
+      if(revealedBy[participants[j]]) {
+        count[worthBy[participants[j]]]++;
+      }
     }
     for (uint k = 1; k < 101; k++) {
       count[k] += count[k-1];
     }
     for (uint m = participants.length-1; m >= 0; m--) {
-      sortedParticipants_[count[worthBy[participants[m]]] - 1] = participants[m];
-      count[worthBy[participants[m]]]--;
+      if(revealedBy[participants[m]]) {
+        sortedParticipants_[count[worthBy[participants[m]]] - 1] = participants[m];
+        count[worthBy[participants[m]]]--;
+      }
     }
   }
 
@@ -202,13 +239,9 @@ contract FaceWorthPoll {
   function getTotalWorth() private view returns (uint totalWorth_) {
     totalWorth_ = 0;
     for(uint i = 0; i < participants.length; i++) {
-      totalWorth_ += worthBy[participants[i]];
-    }
-  }
-
-  function refund() private {
-    for (uint i = 0; i < participants.length; i++) {
-      participants[i].transfer(stake);
+      if (revealedBy[participants[i]]) {
+        totalWorth_ += worthBy[participants[i]];
+      }
     }
   }
 
@@ -216,7 +249,7 @@ contract FaceWorthPoll {
     percentage_ = participants.length * 100 / participantsRequired;
   }
 
-  function getTimeElapsed() external view returns (uint percentage_) {
+  function getCommitTimeElapsed() external view returns (uint percentage_) {
     percentage_ = (block.number - startingBlock) * 100 / (commitEndingBlock - block.number);
   }
 
