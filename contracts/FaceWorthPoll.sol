@@ -1,11 +1,13 @@
 pragma solidity ^0.4.24;
+import "./FaceWorthPollFactory.sol";
 
 contract FaceWorthPoll {
 
   uint public stake;
   uint public winnersReturn;
   uint public distPercentage;
-
+  uint public oneFace;
+  address public factoryAddress;
   address public initiator; // initiator is the one who wants to get his/her own FaceWorth
   bytes32 public faceHash; // face photo's SHA-256 hash
   uint public startingBlock;
@@ -18,6 +20,7 @@ contract FaceWorthPoll {
   mapping(address=>bool) private committedBy;
   mapping(address=>bool) private revealedBy;
   mapping(address=>bool) private withdrawnBy;
+  mapping(address=>bool) private wonBy;
   uint private participantsRequired;
   address[] private participants;
   address[] private winners;
@@ -26,6 +29,8 @@ contract FaceWorthPoll {
   enum Stage { COMMITTING, REVEALING, CANCELLED, ENDED }
 
   constructor(
+    address _factoryAddress,
+    uint _faceTokenDecimals,
     address _initiator,
     bytes32 _faceHash,
     uint _blocksBeforeReveal,
@@ -35,6 +40,8 @@ contract FaceWorthPoll {
     uint _winnersReturn,
     uint _distPercentage
   ) public {
+    factoryAddress = _factoryAddress;
+    oneFace = 10**_faceTokenDecimals;
     initiator = _initiator;
     faceHash = _faceHash;
     startingBlock = block.number;
@@ -121,7 +128,6 @@ contract FaceWorthPoll {
   }
 
   function endPoll() private {
-
     require(currentStage != Stage.ENDED);
     currentStage = Stage.ENDED;
 
@@ -155,6 +161,13 @@ contract FaceWorthPoll {
 
       distributePrize();
     }
+    FaceWorthPollFactory factory = FaceWorthPollFactory(factoryAddress);
+    factory.rewardFaceTokens(initiator, oneFace + oneFace * participants.length / 10);
+    for (uint i = 0; i < participants.length; i++) {
+      if(!wonBy[participants[i]]) {
+        factory.rewardFaceTokens(participants[i], oneFace / 10);
+      }
+    }
     emit StageChange(currentStage, Stage.REVEALING);
   }
 
@@ -166,6 +179,7 @@ contract FaceWorthPoll {
     uint rightIndex = _turningPoint;
     if(worthBy[_sortedParticipants[_turningPoint]] == _totalWorth) {
       winners[index] = _sortedParticipants[_turningPoint];
+      wonBy[winners[index]] = true;
       index++;
       rightIndex++;
     } else {
@@ -183,11 +197,13 @@ contract FaceWorthPoll {
       if (leftIndex < 0 && rightIndex < _sortedParticipants.length
         || leftIndex >= 0 && rightIndex < _sortedParticipants.length && rightDiff <= leftDiff ) {
         winners[index] = _sortedParticipants[rightIndex];
+        wonBy[winners[index]] = true;
         index++;
         rightIndex++;
       } else if (leftIndex >=0 && rightIndex >= _sortedParticipants.length
         || leftIndex >= 0 && rightIndex < _sortedParticipants.length && rightDiff > leftDiff) {
         winners[index] = _sortedParticipants[leftIndex];
+        wonBy[winners[index]] = true;
         index++;
         leftIndex--;
       } else {

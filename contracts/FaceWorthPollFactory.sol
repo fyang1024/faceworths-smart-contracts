@@ -2,6 +2,7 @@ pragma solidity ^0.4.24;
 
 import "./Owned.sol";
 import "./FaceWorthPoll.sol";
+import "./FaceToken.sol";
 
 contract FaceWorthPollFactory is Owned {
 
@@ -16,7 +17,7 @@ contract FaceWorthPollFactory is Owned {
   // TODO !!IMPORTANT!! UPDATE THE ADDRESS ONCE THE FACETOKEN CONTRACT IS DEPLOYED
   address public constant faceTokenAddress = 0x0;
 
-  mapping(address=>bool) deployed;
+  mapping(address => bool) deployed;
 
   address[] deployedPolls;
 
@@ -29,7 +30,7 @@ contract FaceWorthPollFactory is Owned {
     uint revealEndingBlock
   );
 
-  function deployFaceWorthPoll (
+  function deployFaceWorthPoll(
     bytes32 _faceHash,
     uint _blocksBeforeReveal,
     uint _blocksBeforeEnd,
@@ -41,7 +42,19 @@ contract FaceWorthPollFactory is Owned {
     require(_blocksBeforeReveal >= minBlocksBeforeReveal);
     require(_blocksBeforeEnd >= minBlocksBeforeEnd);
     require(_participantsRequired >= minParticipants && _participantsRequired <= maxParticipants);
-    contractAddress = new FaceWorthPoll(msg.sender, _faceHash, _blocksBeforeReveal, _blocksBeforeEnd, _participantsRequired, stake, winnersReturn, distPercentage);
+    FaceToken faceToken = FaceToken(faceTokenAddress);
+    contractAddress = new FaceWorthPoll(
+        address(this),
+        faceToken.decimals(),
+        msg.sender,
+        _faceHash,
+        _blocksBeforeReveal,
+        _blocksBeforeEnd,
+        _participantsRequired,
+        stake,
+        winnersReturn,
+        distPercentage
+    );
     deployed[contractAddress] = true;
     deployedPolls.push(contractAddress);
     FaceWorthPoll faceWorthPoll = FaceWorthPoll(contractAddress);
@@ -53,11 +66,12 @@ contract FaceWorthPollFactory is Owned {
       faceWorthPoll.commitEndingBlock(),
       faceWorthPoll.revealEndingBlock()
     );
-    //    FaceToken faceToken = FaceToken(faceTokenAddress);
-    //    if(faceToken.allowance(faceToken.initialVault(), address(this)) > 0) {
-    //      // pay 1 FACE token once user starts a new game
-    //      faceToken.transferFrom(faceToken.initialVault(), faceWorthPoll.initiator(), 10**faceToken.decimals());
-    //    }
+  }
+
+  function rewardFaceTokens(address _receiver, uint _value) external {
+    require(deployed[msg.sender]);
+    FaceToken faceToken = FaceToken(faceTokenAddress);
+    faceToken.increaseApproval(_receiver, _value);
   }
 
   function getNumberOfPolls() public view returns (uint n_) {
@@ -65,17 +79,17 @@ contract FaceWorthPollFactory is Owned {
   }
 
   function verify(address contractAddress) public view returns (
-    bool    valid,
+    bool valid,
     address initiator,
     bytes32 faceHash,
-    uint    startingBlock,
-    uint    commitEndingBlock,
-    uint    revealEndingBlock
+    uint startingBlock,
+    uint commitEndingBlock,
+    uint revealEndingBlock
   ) {
     valid = deployed[contractAddress];
     if (valid) {
       FaceWorthPoll poll = FaceWorthPoll(contractAddress);
-      initiator  = poll.initiator();
+      initiator = poll.initiator();
       faceHash = poll.faceHash();
       startingBlock = poll.startingBlock();
       commitEndingBlock = poll.commitEndingBlock();
@@ -135,7 +149,7 @@ contract FaceWorthPollFactory is Owned {
     emit MinBlocksBeforeEndUpdate(minBlocksBeforeEnd, oldMinBlocksBeforeEnd);
   }
 
-  function () public payable {
+  function() public payable {
     revert();
   }
 
