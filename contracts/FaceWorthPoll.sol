@@ -68,6 +68,8 @@ contract FaceWorthPoll {
     _;
   }
 
+  event StageChange(Stage newStage, Stage oldStage);
+
   function commit(bytes32 _saltedWorthHash)
     payable
     external
@@ -98,6 +100,7 @@ contract FaceWorthPoll {
   function cancel() external onlyInitiator {
     require (currentStage == Stage.COMMITTING);
     currentStage = Stage.CANCELLED;
+    emit StageChange(currentStage, Stage.COMMITTING);
   }
 
   // this function should be called every 3 seconds (Tron block time) by FacesWorths
@@ -106,8 +109,10 @@ contract FaceWorthPoll {
       if (block.number > commitEndingBlock) {
         if (participants.length < participantsRequired) {
           currentStage = Stage.CANCELLED;
+          emit StageChange(currentStage, Stage.COMMITTING);
         } else if (block.number <= revealEndingBlock) {
           currentStage = Stage.REVEALING;
+          emit StageChange(currentStage, Stage.COMMITTING);
         } else {
           endPoll();
         }
@@ -150,6 +155,7 @@ contract FaceWorthPoll {
 
       distributePrize();
     }
+    emit StageChange(currentStage, Stage.REVEALING);
   }
 
   function findWinners(uint _turningPoint, uint _totalWorth, address[] memory _sortedParticipants) private {
