@@ -18,14 +18,14 @@ contract FaceWorthPollFactory is Owned {
   uint public minBlocksBeforeEnd = 100;
   uint256 public faceTokenRewardPool;
 
-  // TODO !!IMPORTANT!! UPDATE THE ADDRESS ONCE THE FACETOKEN CONTRACT IS DEPLOYED
-  address public constant faceTokenAddress = 0x0;
+  address public faceTokenAddress;
 
   mapping(address => bool) deployed;
 
   address[] deployedPolls;
 
-  constructor() public {
+  constructor(address _faceTokenAddress) public {
+    faceTokenAddress = _faceTokenAddress;
     FaceToken faceToken = FaceToken(faceTokenAddress);
     faceTokenRewardPool = faceToken.totalSupply() * 80 / 100;
   }
