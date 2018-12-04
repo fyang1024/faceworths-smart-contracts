@@ -1,10 +1,14 @@
 const FaceToken = artifacts.require("../contracts/FaceToken.sol");
-const FaceWorthPollFactory = artifacts.require("../contracts/FaceWorthPollFactory.sol");
 
 contract('FaceToken', async () => {
 
+    let faceToken;
+
+    beforeEach(async () => {
+        faceToken = await FaceToken.deployed();
+    });
+
     it("totalSupply is 100,000,000", async () => {
-        let faceToken = await FaceToken.deployed();
         let totalSupplyInSun = await faceToken.totalSupply();
         let decimals = await faceToken.decimals();
         let totalSupply = totalSupplyInSun / (10 ** decimals);
@@ -12,7 +16,6 @@ contract('FaceToken', async () => {
     });
 
     it("totalSupply is in vault when deployed", async () => {
-        let faceToken = await FaceToken.deployed();
         let totalSupplyInSun = await faceToken.totalSupply();
         let decimals = await faceToken.decimals();
         let totalSupply = totalSupplyInSun / (10 ** decimals);
@@ -21,17 +24,4 @@ contract('FaceToken', async () => {
         let balanceOfVault = balanceOfVaultInSun / (10 ** decimals);
         assert.equal(totalSupply, balanceOfVault, "totalSupply wasn't all in vault");
     });
-
-    it("faceTokenRewardPool is 80 percent of FaceToken totalSupply", async () => {
-        let factory = await FaceWorthPollFactory.deployed();
-        // let faceToken = FaceToken.deployed();
-        // let totalSupplyInSun = await faceToken.totalSupply();
-        // let decimals = await faceToken.decimals();
-        // let totalSupply = totalSupplyInSun / (10 ** decimals);
-        // let eightyPercentOfTotalSupply = totalSupply * 8 / 10;
-        // let faceTokenRewardPoolInSun = await factory.faceTokenRewardPool();
-        // let faceTokenRewardPool = faceTokenRewardPoolInSun / (10 ** decimals);
-        // assert.equal(eightyPercentOfTotalSupply, faceTokenRewardPool, "faceTokenRewardPool wasn't 80 percent of FaceToken totalSupply");
-    });
-
 });
