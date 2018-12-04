@@ -1,0 +1,30 @@
+{
+  "name": "faceworths-smart-contracts",
+  "version": "1.0.0",
+  "description": "This project includes a set of smart contracts running on Tron blockchain network. The contracts implement different funtions for the faceworths dApp.",
+  "main": "truffle.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "truffle test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FaceWorths/faceworths-smart-contracts.git"
+  },
+  "keywords": [
+    "smart",
+    "contract"
+  ],
+  "author": "Fei Yang",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/FaceWorths/faceworths-smart-contracts/issues"
+  },
+  "homepage": "https://github.com/FaceWorths/faceworths-smart-contracts#readme",
+
+  "dependencies": {
+    "tronweb": "^2.1.11"
+  }
+}
