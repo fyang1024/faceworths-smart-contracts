@@ -1,4 +1,5 @@
 const FaceToken = artifacts.require("../contracts/FaceToken.sol");
+const FaceWorthPoll = artifacts.require("../contracts/FaceWorthPoll");
 const FaceWorthPollFactory = artifacts.require("../contracts/FaceWorthPollFactory.sol");
 const Tronweb = require("tronweb");
 
@@ -9,7 +10,7 @@ contract('FaceWorthPollFactory', async (accounts) => {
 
     beforeEach(async () => {
         faceToken = await FaceToken.deployed();
-        factory = await FaceWorthPollFactory.new(faceToken.address)
+        factory = await FaceWorthPollFactory.new(faceToken.address);
     });
 
     it("faceTokenRewardPool is 80 percent of FaceToken totalSupply", async () => {
@@ -35,6 +36,13 @@ contract('FaceWorthPollFactory', async (accounts) => {
             let result = await factory.verify(response.args.contractAddress);
             assert.equal(result[0], true, "The result wasn't valid");
             assert.equal(result[1], accounts[0], "Initiator wasn't set correctly");
+
+            let poll = await FaceWorthPoll.at(response.args.contractAddress);
+            let stake = await factory.stake();
+            for(let i = 0; i < accounts.length; i++) {
+                let saltedWorthHash = Tronweb.sha3("" + i, true);
+                await poll.commit(saltedWorthHash, {from: accounts[i], value: stake});
+            }
             event.stopWatching();
         });
     })
