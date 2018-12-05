@@ -88,12 +88,14 @@ contract FaceWorthPoll {
     participants.push(msg.sender);
   }
 
-  function reveal(uint8 _worth, bytes32 _salt)
+  function reveal(string _salt, uint8 _worth)
     external
     committedByMe
     notRevealedByMe
   {
-    require(currentStage == Stage.REVEALING && saltedWorthHashBy[msg.sender] != keccak256(abi.encodePacked(_worth, _salt)));
+    require(currentStage == Stage.REVEALING);
+    require(saltedWorthHashBy[msg.sender] == keccak256(abi.encodePacked(concat(_salt, _worth))));
+    require(_worth >= 0 && _worth <= 100);
     worthBy[msg.sender] = _worth;
     revealCount++;
   }
@@ -318,5 +320,26 @@ contract FaceWorthPoll {
 
   function () public payable {
     revert();
+  }
+
+  function concat(string _str, uint8 _v) private pure returns (string str_) {
+    uint maxLength = 3;
+    bytes memory reversed = new bytes(maxLength);
+    uint i = 0;
+    while (_v != 0) {
+      uint remainder = _v % 10;
+      _v = _v / 10;
+      reversed[i++] = byte(48 + remainder);
+    }
+    bytes memory concatenated = bytes(_str);
+    bytes memory s = new bytes(concatenated.length + i);
+    uint j;
+    for (j = 0; j < concatenated.length; j++) {
+      s[j] = concatenated[j];
+    }
+    for (j = 0; j < i; j++) {
+      s[j + concatenated.length] = reversed[i - 1 - j];
+    }
+    str_ = string(s);
   }
 }

@@ -1,5 +1,5 @@
 const FaceToken = artifacts.require("../contracts/FaceToken.sol");
-const FaceWorthPoll = artifacts.require("../contracts/FaceWorthPoll");
+const FaceWorthPoll = artifacts.require("../contracts/FaceWorthPoll.sol");
 const FaceWorthPollFactory = artifacts.require("../contracts/FaceWorthPollFactory.sol");
 const Tronweb = require("tronweb");
 
@@ -40,9 +40,17 @@ contract('FaceWorthPollFactory', async (accounts) => {
             let poll = await FaceWorthPoll.at(response.args.contractAddress);
             let stake = await factory.stake();
             for(let i = 0; i < accounts.length; i++) {
-                let saltedWorthHash = Tronweb.sha3("" + i, true);
+                let saltedWorthHash = Tronweb.sha3("account" + i, true);
                 await poll.commit(saltedWorthHash, {from: accounts[i], value: stake});
             }
+
+            await poll.checkBlockNumber();
+
+            for(let i = 0; i < accounts.length; i++) {
+                await poll.reveal("account", i, {from: accounts[i]});
+            }
+
+            await poll.checkBlockNumber();
             event.stopWatching();
         });
     })
