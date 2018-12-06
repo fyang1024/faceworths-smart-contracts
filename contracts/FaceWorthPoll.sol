@@ -20,7 +20,7 @@ contract FaceWorthPoll {
   mapping(address => uint8) private worthBy;
   mapping(address => bool) private committedBy;
   mapping(address => bool) private revealedBy;
-  mapping(address => bool) private withdrawnBy;
+  mapping(address => bool) private refunded;
   mapping(address => bool) private wonBy;
   uint private participantsRequired;
   address[] private participants;
@@ -78,10 +78,12 @@ contract FaceWorthPoll {
 
   event StageChange(Stage newStage, Stage oldStage);
 
+  event Refund(address recepient, uint fund);
+
   function commit(bytes32 _saltedWorthHash)
-  payable
-  external
-  notCommittedByMe
+    payable
+    external
+    notCommittedByMe
   {
     require(currentStage == Stage.COMMITTING && msg.value == stake);
     saltedWorthHashBy[msg.sender] = _saltedWorthHash;
@@ -90,9 +92,9 @@ contract FaceWorthPoll {
   }
 
   function reveal(string _salt, uint8 _worth)
-  external
-  committedByMe
-  notRevealedByMe
+    external
+    committedByMe
+    notRevealedByMe
   {
     require(currentStage == Stage.REVEALING);
     require(saltedWorthHashBy[msg.sender] == keccak256(abi.encodePacked(concat(_salt, _worth))));
@@ -102,31 +104,38 @@ contract FaceWorthPoll {
     revealCount++;
   }
 
-  function withdraw() external {
-    require(currentStage == Stage.CANCELLED && committedBy[msg.sender] && !withdrawnBy[msg.sender]);
-    withdrawnBy[msg.sender] = true;
-    msg.sender.transfer(stake);
-  }
-
   function cancel() external onlyInitiator {
     require(currentStage == Stage.COMMITTING);
     currentStage = Stage.CANCELLED;
     emit StageChange(currentStage, Stage.COMMITTING);
+    refund();
   }
 
-  // this function should be called every 3 seconds (Tron block time) by FacesWorths
+  // this function should be called every 3 seconds (Tron block time)
   function checkBlockNumber() external {
     if (currentStage != Stage.CANCELLED && currentStage != Stage.ENDED) {
       if (block.number > commitEndingBlock) {
         if (participants.length < participantsRequired) {
           currentStage = Stage.CANCELLED;
           emit StageChange(currentStage, Stage.COMMITTING);
+          refund();
         } else if (block.number <= revealEndingBlock) {
           currentStage = Stage.REVEALING;
           emit StageChange(currentStage, Stage.COMMITTING);
         } else {
           endPoll();
         }
+      }
+    }
+  }
+
+  function refund() private {
+    require(currentStage == Stage.CANCELLED);
+    for (uint i = 0; i < participants.length; i++) {
+      if (!refunded[participants[i]]) {
+        refunded[participants[i]] = true;
+        participants[i].transfer(stake);
+        emit Refund(participants[i], stake);
       }
     }
   }
@@ -198,7 +207,7 @@ contract FaceWorthPoll {
   }
 
   function findWinners(uint _turningPoint, uint _totalWorth, address[] memory _sortedParticipants) private {
-    uint numOfWinners = participants.length / winnersReturn;
+    uint numOfWinners = participants.length * 1000 / winnersReturn;
     if (numOfWinners > revealCount) numOfWinners = revealCount;
     uint index = 0;
     uint leftIndex = _turningPoint;

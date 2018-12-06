@@ -12,7 +12,7 @@ contract FaceWorthPollFactory is Owned {
   uint public stake = 100000000; // every participant stake 100 trx
   uint public minParticipants = 3;
   uint public maxParticipants = 10000;
-  uint public winnersReturn = 3;   // winnersReturn * distPercentage must be greater than 100,
+  uint public winnersReturn = 382;   // winnersReturn * distPercentage / 1000 must be greater than 100,
   uint public distPercentage = 90; // so that winners prize is greater than the stake
   uint public minBlocksBeforeReveal = 10; // 10 blocks is about 30 seconds
   uint public minBlocksBeforeEnd = 10;
