@@ -1,5 +1,5 @@
 {
-  "name": "faceworths-smart-contracts",
+  "name": "faceworths-ethereum-smart-contracts",
   "version": "1.0.0",
   "description": "This project includes a set of smart contracts running on Tron blockchain network. The contracts implement different funtions for the faceworths dApp.",
   "main": "truffle.js",
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FaceWorths/faceworths-smart-contracts.git"
+    "url": "git+https://github.com/FaceWorths/faceworths-ethereum-smart-contracts.git"
   },
   "keywords": [
     "smart",
@@ -20,11 +20,11 @@
   "author": "Fei Yang",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/FaceWorths/faceworths-smart-contracts/issues"
+    "url": "https://github.com/FaceWorths/faceworths-ethereum-smart-contracts/issues"
   },
-  "homepage": "https://github.com/FaceWorths/faceworths-smart-contracts#readme",
+  "homepage": "https://github.com/FaceWorths/faceworths-ethereum-smart-contracts#readme",
 
   "dependencies": {
-    "tronweb": "^2.1.11"
+    "js-sha3": "^0.8.0"
   }
 }

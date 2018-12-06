@@ -1,7 +1,7 @@
 const FaceToken = artifacts.require("../contracts/FaceToken.sol");
 const FaceWorthPoll = artifacts.require("../contracts/FaceWorthPoll.sol");
 const FaceWorthPollFactory = artifacts.require("../contracts/FaceWorthPollFactory.sol");
-const Tronweb = require("tronweb");
+const keccak256 = require("js-sha3").keccak256;
 
 contract('FaceWorthPollFactory', async (accounts) => {
 
@@ -24,7 +24,7 @@ contract('FaceWorthPollFactory', async (accounts) => {
   });
 
   it("FaceWorthPoll contract is created successfully", async () => {
-    let faceHash = Tronweb.sha3("Some face photo", true);
+    let faceHash = '0x' + keccak256("Some face photo");
     let blocksBeforeReveal = 10; // min number of blocks
     let blocksBeforeEnd = blocksBeforeReveal;
     let participantsRequired = 3;
@@ -42,7 +42,7 @@ contract('FaceWorthPollFactory', async (accounts) => {
       let stake = await factory.stake();
       let score = [1, 2, 2, 3, 3, 3, 3, 3, 3, 4];
       for (let i = 0; i < accounts.length; i++) {
-        let saltedWorthHash = Tronweb.sha3("中文-" + score[i], true);
+        let saltedWorthHash = '0x' + keccak256("中文-" + score[i]);
         await poll.commit(saltedWorthHash, {from: accounts[i], value: stake});
       }
 

@@ -5,7 +5,7 @@ import "./FaceWorthPollFactory.sol";
 contract FaceWorthPoll {
 
   uint public stake;
-  uint public winnersReturn;
+  uint public winnersPerThousand;
   uint public distPercentage;
   uint public oneFace;
   address public factoryAddress;
@@ -38,7 +38,7 @@ contract FaceWorthPoll {
     uint _blocksBeforeEnd,
     uint _participantsRequired,
     uint _stake,
-    uint _winnersReturn,
+    uint _winnersPerThousand,
     uint _distPercentage
   ) public {
     factoryAddress = _factoryAddress;
@@ -50,7 +50,7 @@ contract FaceWorthPoll {
     revealEndingBlock = commitEndingBlock + _blocksBeforeEnd;
     participantsRequired = _participantsRequired;
     stake = _stake;
-    winnersReturn = _winnersReturn;
+    winnersPerThousand = _winnersPerThousand;
     distPercentage = _distPercentage;
     currentStage = Stage.COMMITTING;
     revealCount = 0;
@@ -207,7 +207,7 @@ contract FaceWorthPoll {
   }
 
   function findWinners(uint _turningPoint, uint _totalWorth, address[] memory _sortedParticipants) private {
-    uint numOfWinners = participants.length * 1000 / winnersReturn;
+    uint numOfWinners = participants.length * winnersPerThousand / 1000;
     if (numOfWinners > revealCount) numOfWinners = revealCount;
     uint index = 0;
     uint leftIndex = _turningPoint;

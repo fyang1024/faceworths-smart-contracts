@@ -12,7 +12,7 @@ contract FaceWorthPollFactory is Owned {
   uint public stake = 100000000; // every participant stake 100 trx
   uint public minParticipants = 3;
   uint public maxParticipants = 10000;
-  uint public winnersReturn = 382;   // winnersReturn * distPercentage / 1000 must be greater than 100,
+  uint public winnersPerThousand = 382;   // 1000 * distPercentage / winnersPerThousand must be greater than 100,
   uint public distPercentage = 90; // so that winners prize is greater than the stake
   uint public minBlocksBeforeReveal = 10; // 10 blocks is about 30 seconds
   uint public minBlocksBeforeEnd = 10;
@@ -61,7 +61,7 @@ contract FaceWorthPollFactory is Owned {
         _blocksBeforeEnd,
         _participantsRequired,
         stake,
-        winnersReturn,
+        winnersPerThousand,
         distPercentage
     );
     deployed[contractAddress] = true;
@@ -132,11 +132,11 @@ contract FaceWorthPollFactory is Owned {
   function updateReturnPercentage(uint _winnersReturn, uint _distPercentage) external onlyOwner {
     require(_distPercentage <= 100);
     require(_winnersReturn * _distPercentage > 100);
-    require(_winnersReturn != winnersReturn || _distPercentage != distPercentage);
-    if (_winnersReturn != winnersReturn) {
-      uint oldWinnersReturn = winnersReturn;
-      winnersReturn = _winnersReturn;
-      emit WinnersReturnUpdate(winnersReturn, oldWinnersReturn);
+    require(_winnersReturn != winnersPerThousand || _distPercentage != distPercentage);
+    if (_winnersReturn != winnersPerThousand) {
+      uint oldWinnersReturn = winnersPerThousand;
+      winnersPerThousand = _winnersReturn;
+      emit WinnersReturnUpdate(winnersPerThousand, oldWinnersReturn);
     }
     if (_distPercentage != distPercentage) {
       uint oldDistPercentage = distPercentage;

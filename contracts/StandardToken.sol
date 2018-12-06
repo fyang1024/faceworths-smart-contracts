@@ -1,6 +1,6 @@
 pragma solidity ^0.4.24;
 
-import "./TRC20.sol";
+import "./ERC20.sol";
 import "./SafeMath.sol";
 
 /**
@@ -8,7 +8,7 @@ import "./SafeMath.sol";
  * https://github.com/ethereum/EIPs/issues/20
  * Based on code by FirstBlood: https://github.com/Firstbloodio/token/blob/master/smart_contract/FirstBloodToken.sol
  */
-contract StandardToken is TRC20 {
+contract StandardToken is ERC20 {
 
   using SafeMath for uint256;
 
