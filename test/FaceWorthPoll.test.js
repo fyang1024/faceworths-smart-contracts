@@ -42,14 +42,14 @@ contract('FaceWorthPollFactory', async (accounts) => {
       let stake = await factory.stake();
       let score = [1, 2, 2, 3, 3, 3, 3, 3, 3, 4];
       for (let i = 0; i < accounts.length; i++) {
-        let saltedWorthHash = Tronweb.sha3("account" + score[i], true);
+        let saltedWorthHash = Tronweb.sha3("中文-" + score[i], true);
         await poll.commit(saltedWorthHash, {from: accounts[i], value: stake});
       }
 
       await poll.checkBlockNumber();
 
       for (let i = 0; i < accounts.length; i++) {
-        await poll.reveal("account", score[i], {from: accounts[i]});
+        await poll.reveal("中文-", score[i], {from: accounts[i]});
       }
 
       await poll.checkBlockNumber();
