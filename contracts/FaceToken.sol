@@ -8,7 +8,7 @@ contract FaceToken is StandardToken, Owned {
   // Token metadata
   string public constant name = "FaceWorths Token";
   string public constant symbol = "FACE";
-  uint256 public constant decimals = 6;
+  uint256 public constant decimals = 18;
   address public vault;
 
   constructor(address _vault) public {
