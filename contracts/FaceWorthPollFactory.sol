@@ -9,7 +9,7 @@ contract FaceWorthPollFactory is Owned {
 
   using SafeMath for uint256;
 
-  uint public stake = 100000000; // every participant stake 100 trx
+  uint public stake = 10**18; // every participant stake 1 ETH
   uint public minParticipants = 3;
   uint public maxParticipants = 10000;
   uint public winnersPerThousand = 382;   // 1000 * distPercentage / winnersPerThousand must be greater than 100,

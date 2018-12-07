@@ -12,7 +12,7 @@ contract('FaceToken', async () => {
         let totalSupplyInSun = await faceToken.totalSupply();
         let decimals = await faceToken.decimals();
         let totalSupply = totalSupplyInSun / (10 ** decimals);
-        assert.equal(totalSupply, 100000000, "totalSupply wasn't 100,000,000");
+        assert.equal(totalSupply, 1000000000, "totalSupply wasn't 1,000,000,000");
     });
 
     it("totalSupply is in vault when deployed", async () => {
