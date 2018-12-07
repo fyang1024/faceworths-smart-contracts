@@ -129,14 +129,14 @@ contract FaceWorthPollFactory is Owned {
     }
   }
 
-  function updateReturnPercentage(uint _winnersReturn, uint _distPercentage) external onlyOwner {
+  function updateRewardRatios(uint _winnersPerThousand, uint _distPercentage) external onlyOwner {
     require(_distPercentage <= 100);
-    require(_winnersReturn * _distPercentage > 100);
-    require(_winnersReturn != winnersPerThousand || _distPercentage != distPercentage);
-    if (_winnersReturn != winnersPerThousand) {
+    require(1000 * _distPercentage / _winnersPerThousand >= 100);
+    require(_winnersPerThousand != winnersPerThousand || _distPercentage != distPercentage);
+    if (_winnersPerThousand != winnersPerThousand) {
       uint oldWinnersReturn = winnersPerThousand;
-      winnersPerThousand = _winnersReturn;
-      emit WinnersReturnUpdate(winnersPerThousand, oldWinnersReturn);
+      winnersPerThousand = _winnersPerThousand;
+      emit RewardRatiosUpdate(winnersPerThousand, oldWinnersReturn);
     }
     if (_distPercentage != distPercentage) {
       uint oldDistPercentage = distPercentage;
@@ -169,7 +169,7 @@ contract FaceWorthPollFactory is Owned {
 
   event MaxParticipantsUpdate(uint newMaxParticipants, uint oldMaxParticipants);
 
-  event WinnersReturnUpdate(uint newWinnersReturn, uint oldWinnersReturn);
+  event RewardRatiosUpdate(uint newWinnersPerThousand, uint oldWinnersPerThousand);
 
   event DistPercentageUpdate(uint newDistPercentage, uint oldDistPercentage);
 

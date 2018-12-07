@@ -13,7 +13,7 @@ contract FaceToken is StandardToken, Owned {
 
   constructor(address _vault) public {
     vault = _vault;
-    totalSupply_ = (10**8) * 10**decimals; // 100 million
+    totalSupply_ = (10**9) * 10**decimals; // 100 million
     balances[vault] = totalSupply_;
     emit Mint(vault, balances[vault]);
   }
