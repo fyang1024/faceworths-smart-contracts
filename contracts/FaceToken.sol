@@ -11,9 +11,9 @@ contract FaceToken is StandardToken, Owned {
   uint256 public constant decimals = 18;
   address public vault;
 
-  constructor(address _vault) public {
-    vault = _vault;
-    totalSupply_ = (10**9) * 10**decimals; // 100 million
+  constructor() public {
+    vault = msg.sender;
+    totalSupply_ = (10**9) * 10**decimals; // 1 billion
     balances[vault] = totalSupply_;
     emit Mint(vault, balances[vault]);
   }
