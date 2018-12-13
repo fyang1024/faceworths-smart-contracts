@@ -121,6 +121,7 @@ contract FaceWorthPollFactory is Owned {
     polls[_hash].worthBy[msg.sender] = _worth;
     polls[_hash].revealedBy[msg.sender] = true;
     polls[_hash].revealCount++;
+    polls[_hash].totalWorth += _worth;
     emit Reveal(_hash, msg.sender, _worth);
   }
 
@@ -174,10 +175,8 @@ contract FaceWorthPollFactory is Owned {
       // sort the participants by their worth from low to high using Counting Sort
       address[] memory sortedParticipants = sortParticipants(_hash);
 
-      uint totalWorth = getTotalWorth(_hash);
-      polls[_hash].totalWorth = totalWorth;
       // find turning point where the right gives higher than average FaceWorth and the left lower
-      uint turningPoint = getTurningPoint(_hash, totalWorth, sortedParticipants);
+      uint turningPoint = getTurningPoint(_hash, polls[_hash].totalWorth, sortedParticipants);
 
       // reverse those who give lower than average but the same FaceWorth so that the earlier participant is closer to the turning point
       if (turningPoint > 0) {
@@ -202,7 +201,7 @@ contract FaceWorthPollFactory is Owned {
         }
       }
 
-      findWinners(_hash, turningPoint, totalWorth, sortedParticipants);
+      findWinners(_hash, turningPoint, polls[_hash].totalWorth, sortedParticipants);
 
       distributePrize(_hash);
 
@@ -403,16 +402,6 @@ contract FaceWorthPollFactory is Owned {
       }
     }
     return turningPoint_;
-  }
-
-  function getTotalWorth(bytes32 _hash) private view returns (uint) {
-    uint totalWorth_ = 0;
-    for (uint i = 0; i < polls[_hash].participants.length; i++) {
-      if (polls[_hash].revealedBy[polls[_hash].participants[i]]) {
-        totalWorth_ += polls[_hash].worthBy[polls[_hash].participants[i]];
-      }
-    }
-    return totalWorth_;
   }
 
   function getStatus(bytes32 _hash) external view
