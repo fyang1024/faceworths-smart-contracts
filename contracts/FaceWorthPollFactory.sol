@@ -11,7 +11,8 @@ contract FaceWorthPollFactory is Owned {
   uint8 public constant COMMITTING = 1;
   uint8 public constant REVEALING = 2;
   uint8 public constant CANCELLED = 3;
-  uint8 public constant ENDED = 4;
+  uint8 public constant TIMEOUT = 4;
+  uint8 public constant ENDED = 5;
 
   struct FaceWorthPoll {
     address creator;
@@ -36,7 +37,7 @@ contract FaceWorthPollFactory is Owned {
   uint public oneFace;
   uint public stake = 10**18; // every participant stake 1 ETH
   uint public minParticipants = 3;
-  uint public maxParticipants = 100000;
+  uint public maxParticipants = 1000;
   uint public winnersPerThousand = 382;   // 1000 * distPercentage / winnersPerThousand must be greater than 100,
   uint public distPercentage = 90; // so that winners prize is greater than the stake
   uint public minBlocksBeforeReveal = 10; // 10 blocks is about 30 seconds
@@ -105,9 +106,10 @@ contract FaceWorthPollFactory is Owned {
     polls[_hash].saltedWorthHashBy[msg.sender] = _saltedWorthHash;
     polls[_hash].committedBy[msg.sender] = true;
     polls[_hash].participants.push(msg.sender);
+    emit Commit(_hash, msg.sender);
     if (polls[_hash].participants.length >= maxParticipants) {
       polls[_hash].currentStage = REVEALING;
-      emit StageChange(_hash, REVEALING, COMMITTING);
+      emit StageChange(_hash, REVEALING, COMMITTING, block.number);
     }
   }
 
@@ -130,22 +132,23 @@ contract FaceWorthPollFactory is Owned {
     require(polls[_hash].currentStage == COMMITTING);
 
     polls[_hash].currentStage = CANCELLED;
-    emit StageChange(_hash, CANCELLED, COMMITTING);
+    emit StageChange(_hash, CANCELLED, COMMITTING, block.number);
     refund(_hash);
   }
 
   // this function should be called every 3 seconds (Tron block time)
   function checkBlockNumber(bytes32 _hash) external {
-    if (polls[_hash].currentStage != CANCELLED && polls[_hash].currentStage != ENDED) {
+    uint8 stage = polls[_hash].currentStage;
+    if (stage != CANCELLED && stage != ENDED && stage != TIMEOUT) {
       if (block.number > polls[_hash].commitEndingBlock) {
         if (polls[_hash].participants.length < minParticipants) {
-          polls[_hash].currentStage = CANCELLED;
-          emit StageChange(_hash, polls[_hash].currentStage, COMMITTING);
+          polls[_hash].currentStage = TIMEOUT;
+          emit StageChange(_hash, TIMEOUT, COMMITTING, block.number);
           refund(_hash);
         } else if (block.number <= polls[_hash].revealEndingBlock) {
           if (polls[_hash].currentStage != REVEALING) {
             polls[_hash].currentStage = REVEALING;
-            emit StageChange(_hash, REVEALING, COMMITTING);
+            emit StageChange(_hash, REVEALING, COMMITTING, block.number);
           }
         } else if(polls[_hash].currentStage != ENDED) {
           endPoll(_hash);
@@ -155,8 +158,6 @@ contract FaceWorthPollFactory is Owned {
   }
 
   function refund(bytes32 _hash) private {
-    require(polls[_hash].currentStage == CANCELLED);
-
     for (uint i = 0; i < polls[_hash].participants.length; i++) {
       if (!polls[_hash].refunded[polls[_hash].participants[i]]) {
         polls[_hash].refunded[polls[_hash].participants[i]] = true;
@@ -167,8 +168,6 @@ contract FaceWorthPollFactory is Owned {
   }
 
   function endPoll(bytes32 _hash) private {
-    require(polls[_hash].currentStage != ENDED);
-
     polls[_hash].currentStage = ENDED;
 
     if (polls[_hash].revealCount > 0) {
@@ -212,7 +211,7 @@ contract FaceWorthPollFactory is Owned {
 
     rewardFaceTokens(_hash);
 
-    emit StageChange(_hash, ENDED, REVEALING);
+    emit StageChange(_hash, ENDED, REVEALING, block.number);
   }
 
   function rewardFaceTokens(bytes32 _hash) private {
@@ -253,6 +252,7 @@ contract FaceWorthPollFactory is Owned {
     if (polls[_hash].worthBy[_sortedParticipants[_turningPoint]] * polls[_hash].revealCount == _totalWorth) {
       polls[_hash].winners.push(_sortedParticipants[_turningPoint]);
       polls[_hash].wonBy[_sortedParticipants[_turningPoint]] = true;
+      emit Win(_hash, _sortedParticipants[_turningPoint], polls[_hash].worthBy[_sortedParticipants[_turningPoint]]);
       count++;
       rightIndex++;
     } else {
@@ -268,11 +268,13 @@ contract FaceWorthPollFactory is Owned {
       if (rightIndex < _sortedParticipants.length && rightDiff <= leftDiff) {
         polls[_hash].winners.push(_sortedParticipants[rightIndex]);
         polls[_hash].wonBy[_sortedParticipants[rightIndex]] = true;
+        emit Win(_hash, _sortedParticipants[rightIndex], polls[_hash].worthBy[_sortedParticipants[rightIndex]]);
         count++;
         rightIndex++;
       } else if (rightIndex >= _sortedParticipants.length || rightIndex < _sortedParticipants.length && rightDiff > leftDiff) {
         polls[_hash].winners.push(_sortedParticipants[leftIndex]);
         polls[_hash].wonBy[_sortedParticipants[leftIndex]] = true;
+        emit Win(_hash, _sortedParticipants[leftIndex], polls[_hash].worthBy[_sortedParticipants[leftIndex]]);
         count++;
         if (leftIndex > 0) leftIndex--;
         else rightIndex++;
@@ -281,8 +283,6 @@ contract FaceWorthPollFactory is Owned {
   }
 
   function distributePrize(bytes32 _hash) private {
-    require(polls[_hash].winners.length > 0);
-
     uint totalPrize = stake * polls[_hash].participants.length * distPercentage / 100;
     uint winnerCount = polls[_hash].winners.length;
     if (winnerCount == 1) {
@@ -467,7 +467,7 @@ contract FaceWorthPollFactory is Owned {
     return polls[_hash].participants.length;
   }
 
-  function getParticipants(bytes32 _hash) external view returns (address[]) {
+  function getParticipants(bytes32 _hash) external view returns (address[] memory) {
     require(polls[_hash].currentStage != COMMITTING);
     return polls[_hash].participants;
   }
@@ -475,6 +475,11 @@ contract FaceWorthPollFactory is Owned {
   function getWorthBy(bytes32 _hash, address _who) external view returns (uint8) {
     require(polls[_hash].currentStage == ENDED);
     return polls[_hash].worthBy[_who];
+  }
+
+  function getWinnerCount(bytes32 _hash) external view returns (uint) {
+    require(polls[_hash].currentStage == ENDED);
+    return polls[_hash].winners.length;
   }
 
   function getWinners(bytes32 _hash) external view returns (address[]) {
@@ -580,9 +585,13 @@ contract FaceWorthPollFactory is Owned {
 
   event MinBlocksBeforeEndUpdate(uint newMinBlocksBeforeUpdate, uint oldMinBlocksBeforeUpdate);
 
-  event StageChange(bytes32 hash, uint8 newStage, uint8 oldStage);
+  event StageChange(bytes32 hash, uint8 newStage, uint8 oldStage, uint blockNumber);
 
   event Refund(bytes32 hash, address recepient, uint fund);
 
+  event Commit(bytes32 hash, address committer);
+
   event Reveal(bytes32 hash, address revealor, uint8 worth);
+
+  event Win(bytes32 hash, address winner, uint8 worth);
 }
