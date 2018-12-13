@@ -13,12 +13,13 @@ contract('FaceWorthPollFactory', async (accounts) => {
   });
 
   it("faceTokenRewardPool is 61.8 percent of FaceToken totalSupply", async () => {
-    let totalSupplyInSun = await faceToken.totalSupply();
+    let totalSupplyInWei = await faceToken.totalSupply();
     let decimals = await faceToken.decimals();
-    let totalSupply = totalSupplyInSun / (10 ** decimals);
+    let totalSupply = totalSupplyInWei / (10 ** decimals);
     let portionOfTotalSupply = totalSupply * 618 / 1000;
     let faceTokenRewardPoolInWei = await factory.faceTokenRewardPool();
     let faceTokenRewardPool = faceTokenRewardPoolInWei / (10 ** decimals);
+    console.log("faceTokenRewardPool", faceTokenRewardPool);
     assert.equal(portionOfTotalSupply, faceTokenRewardPool, "faceTokenRewardPool wasn't 61.8 percent of FaceToken totalSupply");
   });
 
@@ -29,10 +30,21 @@ contract('FaceWorthPollFactory', async (accounts) => {
     await factory.createFaceWorthPoll(faceHash, blocksBeforeReveal, blocksBeforeEnd);
     let pollCount = await factory.pollCount();
     assert.equal(pollCount, 1, "Poll count wasn't 1 after 1 poll is created");
-    let event = factory.FaceWorthPollCreated();
-    event.watch(async (err, response) => {
+
+    let approvalEvent = faceToken.Approval();
+    approvalEvent.watch((err, response) => {
+      console.log("Approval", response.args);
+    });
+
+    let stageChangeEvent = factory.StageChange();
+    stageChangeEvent.watch((err, response) => {
+      console.log('Stage Change', response.args);
+    });
+
+    let creationEvent = factory.FaceWorthPollCreated();
+    creationEvent.watch(async (err, response) => {
       assert.equal(response.args.creator, accounts[0], "Creator wasn't set correctly");
-      let hash = '0x' + response.args.hash;
+      let hash = response.args.hash;
       let stake = await factory.stake();
       let score = [1, 2, 2, 3, 3, 3, 3, 3, 3, 4];
       for (let i = 0; i < accounts.length; i++) {
@@ -46,7 +58,7 @@ contract('FaceWorthPollFactory', async (accounts) => {
         await factory.reveal(hash, "中文-", score[i], {from: accounts[i]});
       }
 
-      await poll.checkBlockNumber(hash);
+      await factory.checkBlockNumber(hash);
 
       let winners = await factory.getWinners(hash);
       for (let i = 0; i < winners.length; i++) {
@@ -54,17 +66,7 @@ contract('FaceWorthPollFactory', async (accounts) => {
         console.log(winners[i], worth);
       }
 
-      let approvalEvent = faceToken.Approval();
-      let approvalCount = 0;
-      let loserCount = accounts.length - winners.length;
-      approvalEvent.watch((err, response) => {
-        approvalCount++;
-        console.log("Approval", response.args);
-        if (approvalCount === loserCount) {
-          approvalEvent.stopWatching();
-        }
-      });
-      event.stopWatching();
+      creationEvent.stopWatching();
     });
   })
 });

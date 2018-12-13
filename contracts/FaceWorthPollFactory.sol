@@ -188,7 +188,10 @@ contract FaceWorthPollFactory is Owned {
           while (end > 0 && polls[_hash].worthBy[sortedParticipants[start]] == polls[_hash].worthBy[sortedParticipants[end - 1]]) {
             end = end - 1;
           }
-          if (end > 0) p = end - 1;
+
+          if (end > 1) p = end - 1;
+          else p = 0;
+
           while (start > end) {
             address tmp = sortedParticipants[start];
             sortedParticipants[start] = sortedParticipants[end];
@@ -242,38 +245,36 @@ contract FaceWorthPollFactory is Owned {
     faceToken.increaseApproval(_receiver, _value);
   }
 
-
   function findWinners(bytes32 _hash, uint _turningPoint, uint _totalWorth, address[] memory _sortedParticipants) private {
     uint numOfWinners = polls[_hash].participants.length * winnersPerThousand / 1000;
     if (numOfWinners > polls[_hash].revealCount) numOfWinners = polls[_hash].revealCount;
-    uint index = 0;
+    uint count = 0;
     uint leftIndex = _turningPoint;
     uint rightIndex = _turningPoint;
     if (polls[_hash].worthBy[_sortedParticipants[_turningPoint]] * polls[_hash].revealCount == _totalWorth) {
       polls[_hash].winners.push(_sortedParticipants[_turningPoint]);
-      polls[_hash].wonBy[polls[_hash].winners[index]] = true;
-      index++;
+      polls[_hash].wonBy[_sortedParticipants[_turningPoint]] = true;
+      count++;
       rightIndex++;
     } else {
       if (leftIndex > 0) leftIndex--;
       else rightIndex++;
     }
-    while (index < numOfWinners) {
+    while (count < numOfWinners) {
       uint rightDiff;
       if (rightIndex < _sortedParticipants.length) {
         rightDiff = polls[_hash].worthBy[_sortedParticipants[rightIndex]] * polls[_hash].revealCount - _totalWorth;
       }
       uint leftDiff = _totalWorth - polls[_hash].worthBy[_sortedParticipants[leftIndex]] * polls[_hash].revealCount;
-
       if (rightIndex < _sortedParticipants.length && rightDiff <= leftDiff) {
         polls[_hash].winners.push(_sortedParticipants[rightIndex]);
         polls[_hash].wonBy[_sortedParticipants[rightIndex]] = true;
-        index++;
+        count++;
         rightIndex++;
       } else if (rightIndex >= _sortedParticipants.length || rightIndex < _sortedParticipants.length && rightDiff > leftDiff) {
         polls[_hash].winners.push(_sortedParticipants[leftIndex]);
         polls[_hash].wonBy[_sortedParticipants[leftIndex]] = true;
-        index++;
+        count++;
         if (leftIndex > 0) leftIndex--;
         else rightIndex++;
       }
@@ -284,15 +285,20 @@ contract FaceWorthPollFactory is Owned {
     require(polls[_hash].winners.length > 0);
 
     uint totalPrize = stake * polls[_hash].participants.length * distPercentage / 100;
-    uint avgPrize = totalPrize / polls[_hash].winners.length;
-    uint minPrize = (avgPrize + 2 * stake) / 3;
-    uint step = (avgPrize - minPrize) / (polls[_hash].winners.length / 2);
-    uint prize = minPrize;
-    for (uint i = polls[_hash].winners.length; i > 0; i--) {
-      address winner = polls[_hash].winners[i - 1];
-      prizeBy[winner] += prize;
-      winner.transfer(prize);
-      prize += step;
+    uint winnerCount = polls[_hash].winners.length;
+    if (winnerCount == 1) {
+      prizeBy[polls[_hash].winners[0]] += totalPrize;
+      polls[_hash].winners[0].transfer(totalPrize);
+    } else {
+      uint avgPrize = totalPrize / winnerCount;
+      uint minPrize = (avgPrize + 2 * stake) / 3;
+      uint step = (avgPrize - minPrize) / (winnerCount / 2);
+      uint prize = minPrize;
+      for (uint i = winnerCount; i > 0; i--) {
+        prizeBy[polls[_hash].winners[i - 1]] += prize;
+        polls[_hash].winners[i - 1].transfer(prize);
+        prize += step;
+      }
     }
   }
 
@@ -414,7 +420,9 @@ contract FaceWorthPollFactory is Owned {
     uint commitTimeLapsed_,
     uint revealTimeLapsed_,
     uint8 currentStage_,
-    uint participantCount_
+    uint participantCount_,
+    uint revealCount_,
+    uint totalWorth_
   )
   {
     if (block.number >= polls[_hash].commitEndingBlock) commitTimeLapsed_ = 100;
@@ -436,6 +444,10 @@ contract FaceWorthPollFactory is Owned {
     currentStage_ = polls[_hash].currentStage;
 
     participantCount_ = polls[_hash].participants.length;
+
+    revealCount_ = polls[_hash].revealCount;
+
+    totalWorth_ = polls[_hash].totalWorth;
   }
 
   function getCommitTimeElapsed(bytes32 _hash) external view returns (uint) {
@@ -530,6 +542,7 @@ contract FaceWorthPollFactory is Owned {
 
   function updateRewardRatios(uint _winnersPerThousand, uint _distPercentage) external onlyOwner {
     require(_distPercentage <= 100);
+    require(_winnersPerThousand < 1000);
     require(1000 * _distPercentage / _winnersPerThousand >= 100);
     require(_winnersPerThousand != winnersPerThousand || _distPercentage != distPercentage);
 
