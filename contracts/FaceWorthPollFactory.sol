@@ -49,7 +49,7 @@ contract FaceWorthPollFactory is Owned {
   uint8 public topFaceWorthCount = 0;
   address[20] public topWinners;
   uint8 public topWinnersCount = 0;
-  mapping(address=>uint) prizeBy;
+  mapping(address=>uint) public prizeBy;
   mapping(bytes32 => FaceWorthPoll) public polls;
   uint256 public pollCount;
 
@@ -74,7 +74,7 @@ contract FaceWorthPollFactory is Owned {
     uint _blocksBeforeReveal,
     uint _blocksBeforeEnd
   )
-    public
+  public
   {
     require(_blocksBeforeReveal >= minBlocksBeforeReveal);
     require(_blocksBeforeEnd >= minBlocksBeforeEnd);
@@ -485,6 +485,10 @@ contract FaceWorthPollFactory is Owned {
   function getWinners(bytes32 _hash) external view returns (address[]) {
     require(polls[_hash].currentStage == ENDED);
     return polls[_hash].winners;
+  }
+
+  function getPrize(address winner) external view returns (uint) {
+    return prizeBy[winner];
   }
 
   function concat(string _str, uint8 _v) private pure returns (string) {
