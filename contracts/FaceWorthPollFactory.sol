@@ -17,9 +17,9 @@ contract FaceWorthPollFactory is Owned {
   struct FaceWorthPoll {
     address creator;
     bytes32 faceHash;  // face photo's SHA-256 hash
-    uint startingBlock;
-    uint commitEndingBlock;
-    uint revealEndingBlock;
+    uint startBlock;
+    uint commitEndBlock;
+    uint revealEndBlock;
     uint8 currentStage;
 
     mapping(address => bytes32) saltedWorthHashBy;
@@ -37,21 +37,22 @@ contract FaceWorthPollFactory is Owned {
   uint public oneFace;
   uint public stake = 10**18; // every participant stake 1 ETH
   uint public minParticipants = 3;
-  uint public maxParticipants = 1000;
+  uint public maxParticipants = 618;
   uint public winnersPerThousand = 382;   // 1000 * distPercentage / winnersPerThousand must be greater than 100,
-  uint public distPercentage = 90; // so that winners prize is greater than the stake
+  uint public distPercentage = 80; // so that winners prize is greater than the stake
   uint public minBlocksBeforeReveal = 10; // 10 blocks is about 30 seconds
   uint public minBlocksBeforeEnd = 10;
   address public faceTokenAddress;
   uint256 public faceTokenRewardPool;
 
-  bytes32[20] public topFaceWorth;
-  uint8 public topFaceWorthCount = 0;
-  address[20] public topWinners;
+  bytes32[10] public topFaces;
+  uint8 public topFaceCount = 0;
+  address[10] public topWinners;
   uint8 public topWinnersCount = 0;
+  mapping(address=>uint) public topWinnersRank;
   mapping(address=>uint) public prizeBy;
   mapping(bytes32 => FaceWorthPoll) public polls;
-  uint256 public pollCount;
+  bytes32[] pollHashes;
 
   constructor(address _faceTokenAddress) public {
     faceTokenAddress = _faceTokenAddress;
@@ -64,9 +65,9 @@ contract FaceWorthPollFactory is Owned {
     bytes32 indexed hash,
     address indexed creator,
     bytes32 indexed faceHash,
-    uint startingBlock,
-    uint commitEndingBlock,
-    uint revealEndingBlock
+    uint startBlock,
+    uint commitEndBlock,
+    uint revealEndBlock
   );
 
   function createFaceWorthPoll(
@@ -74,7 +75,7 @@ contract FaceWorthPollFactory is Owned {
     uint _blocksBeforeReveal,
     uint _blocksBeforeEnd
   )
-  public
+  public returns (bytes32)
   {
     require(_blocksBeforeReveal >= minBlocksBeforeReveal);
     require(_blocksBeforeEnd >= minBlocksBeforeEnd);
@@ -82,20 +83,26 @@ contract FaceWorthPollFactory is Owned {
     bytes32 hash = keccak256(abi.encodePacked(msg.sender, _faceHash, block.number));
     polls[hash].creator = msg.sender;
     polls[hash].faceHash = _faceHash;
-    polls[hash].startingBlock = block.number;
-    polls[hash].commitEndingBlock = block.number + _blocksBeforeReveal;
-    polls[hash].revealEndingBlock = polls[hash].commitEndingBlock + _blocksBeforeEnd;
+    polls[hash].startBlock = block.number;
+    polls[hash].commitEndBlock = block.number + _blocksBeforeReveal;
+    polls[hash].revealEndBlock = polls[hash].commitEndBlock + _blocksBeforeEnd;
     polls[hash].currentStage = COMMITTING;
-    pollCount++;
+    pollHashes.push(hash);
 
     emit FaceWorthPollCreated(
       hash,
       msg.sender,
       _faceHash,
       block.number,
-      polls[hash].commitEndingBlock,
-      polls[hash].revealEndingBlock
+      polls[hash].commitEndBlock,
+      polls[hash].revealEndBlock
     );
+
+    return hash;
+  }
+
+  function getPollCount() external view returns(uint) {
+    return pollHashes.length;
   }
 
   function commit(bytes32 _hash, bytes32 _saltedWorthHash) payable external {
@@ -125,6 +132,10 @@ contract FaceWorthPollFactory is Owned {
     polls[_hash].revealCount++;
     polls[_hash].totalWorth += _worth;
     emit Reveal(_hash, msg.sender, _worth);
+    if (polls[_hash].revealCount == polls[_hash].participants.length) {
+      emit EarlyReveal(_hash, block.number, polls[_hash].revealEndBlock);
+      polls[_hash].revealEndBlock = block.number;
+    }
   }
 
   function cancel(bytes32 _hash) external {
@@ -140,12 +151,12 @@ contract FaceWorthPollFactory is Owned {
   function checkBlockNumber(bytes32 _hash) external {
     uint8 stage = polls[_hash].currentStage;
     if (stage != CANCELLED && stage != ENDED && stage != TIMEOUT) {
-      if (block.number > polls[_hash].commitEndingBlock) {
+      if (block.number > polls[_hash].commitEndBlock) {
         if (polls[_hash].participants.length < minParticipants) {
           polls[_hash].currentStage = TIMEOUT;
           emit StageChange(_hash, TIMEOUT, COMMITTING, block.number);
           refund(_hash);
-        } else if (block.number <= polls[_hash].revealEndingBlock) {
+        } else if (block.number <= polls[_hash].revealEndBlock) {
           if (polls[_hash].currentStage != REVEALING) {
             polls[_hash].currentStage = REVEALING;
             emit StageChange(_hash, REVEALING, COMMITTING, block.number);
@@ -206,7 +217,7 @@ contract FaceWorthPollFactory is Owned {
 
       reorderTopWinners(_hash);
 
-      reorderTopFaceWorth(_hash);
+      reorderTopFaces(_hash);
     }
 
     rewardFaceTokens(_hash);
@@ -289,10 +300,19 @@ contract FaceWorthPollFactory is Owned {
       prizeBy[polls[_hash].winners[0]] += totalPrize;
       polls[_hash].winners[0].transfer(totalPrize);
     } else {
-      uint avgPrize = totalPrize / winnerCount;
-      uint minPrize = (avgPrize + 2 * stake) / 3;
-      uint step = (avgPrize - minPrize) / (winnerCount / 2);
-      uint prize = minPrize;
+      uint minLowestPrize = stake + (stake / 10);
+      uint maxStep = (totalPrize * 2 - 2 * minLowestPrize * winnerCount)  / (winnerCount ** 2 - winnerCount);
+      uint step;
+      if (maxStep <= 2) {
+        step = maxStep;
+      } else  {
+        step = (1 + maxStep) / 2;
+        if (step > stake) {
+          step = stake;
+        }
+      }
+      uint lowestPrize = (totalPrize * 2 + step * winnerCount - step * (winnerCount ** 2)) / (2 * winnerCount);
+      uint prize = lowestPrize;
       for (uint i = winnerCount; i > 0; i--) {
         prizeBy[polls[_hash].winners[i - 1]] += prize;
         polls[_hash].winners[i - 1].transfer(prize);
@@ -302,50 +322,79 @@ contract FaceWorthPollFactory is Owned {
   }
 
   function reorderTopWinners(bytes32 _hash) private {
-    uint end = polls[_hash].winners.length;
-    if (end > topWinners.length) {
-      end = topWinners.length;
-    }
-    for (uint i = 0; i < end; i++) {
-      bool inserted = false;
-      for (uint j = 0; j < topWinnersCount; j++) {
-        if (prizeBy[polls[_hash].winners[i]] >= prizeBy[topWinners[j]]) {
-          if (topWinnersCount < topWinners.length) {
-            topWinnersCount++;
+    for (uint i = 0; i < polls[_hash].winners.length; i++) {
+      uint currentRank = topWinnersRank[polls[_hash].winners[i]];
+      if (currentRank > 0) { // already top winners
+        if (currentRank > 1 && prizeBy[topWinners[currentRank - 1]] > prizeBy[topWinners[currentRank - 2]]) {
+          for (uint p = currentRank - 1; p > 0; p--) {
+            if (prizeBy[topWinners[p]] > prizeBy[topWinners[p - 1]]) {
+              topWinners[p] = topWinners[p - 1];
+              topWinnersRank[topWinners[p]] = p + 1;
+              topWinners[p-1] = polls[_hash].winners[i];
+              topWinnersRank[topWinners[p - 1]] = p;
+            } else {
+              break;
+            }
           }
-          for (uint k = topWinnersCount - 1; k > j; k--) {
-            topWinners[k] = topWinners[k - 1];
+        } else {
+          for (uint q = currentRank - 1; q < topWinnersCount - 1; q++) {
+            if (prizeBy[topWinners[q]] < prizeBy[topWinners[q + 1]]) {
+              topWinners[q] = topWinners[q + 1];
+              topWinnersRank[topWinners[q]] = q + 1;
+              topWinners[q + 1] = polls[_hash].winners[i];
+              topWinnersRank[topWinners[q + 1]] = q + 2;
+            } else {
+              break;
+            }
           }
-          topWinners[j] = polls[_hash].winners[i];
-          inserted = true;
-          break;
         }
-      }
-      if (!inserted && topWinnersCount < topWinners.length) {
-        topWinners[topWinnersCount] = polls[_hash].winners[i];
-        topWinnersCount++;
+      } else {
+        bool inserted = false;
+        for (uint j = 0; j < topWinnersCount; j++) {
+          if (prizeBy[polls[_hash].winners[i]] >= prizeBy[topWinners[j]]) {
+            if (topWinnersCount == topWinners.length) {
+              topWinnersRank[topWinners[topWinnersCount - 1]] = 0;
+            }
+            if (topWinnersCount < topWinners.length) {
+              topWinnersCount++;
+            }
+            for (uint k = topWinnersCount - 1; k > j; k--) {
+              topWinners[k] = topWinners[k - 1];
+              topWinnersRank[topWinners[k]] = k + 1;
+            }
+            topWinners[j] = polls[_hash].winners[i];
+            topWinnersRank[topWinners[j]] = j + 1;
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted && topWinnersCount < topWinners.length) {
+          topWinners[topWinnersCount] = polls[_hash].winners[i];
+          topWinnersRank[topWinners[topWinnersCount]] = topWinnersCount + 1;
+          topWinnersCount++;
+        }
       }
     }
   }
 
-  function reorderTopFaceWorth(bytes32 _hash) private {
+  function reorderTopFaces(bytes32 _hash) private {
     bool inserted = false;
-    for (uint i = 0; i < topFaceWorthCount; i++) {
-      if (compareScore(_hash, topFaceWorth[i]) >= 0) {
-        if (topFaceWorthCount < topFaceWorth.length) {
-          topFaceWorthCount++;
+    for (uint i = 0; i < topFaceCount; i++) {
+      if (compareScore(_hash, topFaces[i]) >= 0) {
+        if (topFaceCount < topFaces.length) {
+          topFaceCount++;
         }
-        for (uint j = topFaceWorthCount - 1; j > i; j--) {
-          topFaceWorth[j] = topFaceWorth[j - 1];
+        for (uint j = topFaceCount - 1; j > i; j--) {
+          topFaces[j] = topFaces[j - 1];
         }
-        topFaceWorth[i] = _hash;
+        topFaces[i] = _hash;
         inserted = true;
         break;
       }
     }
-    if (!inserted && topFaceWorthCount < topFaceWorth.length) {
-      topFaceWorth[topFaceWorthCount] = _hash;
-      topFaceWorthCount++;
+    if (!inserted && topFaceCount < topFaces.length) {
+      topFaces[topFaceCount] = _hash;
+      topFaceCount++;
     }
   }
 
@@ -360,13 +409,25 @@ contract FaceWorthPollFactory is Owned {
     }
   }
 
-  function compareScore(bytes32 _hash1, bytes32 _hash2) private view returns (uint) {
+  function compareScore(bytes32 _hash1, bytes32 _hash2) private view returns (int) {
     uint score1 = polls[_hash1].totalWorth * polls[_hash2].revealCount * sqrt(polls[_hash1].participants.length * 10);
     uint score2 = polls[_hash2].totalWorth * polls[_hash1].revealCount * sqrt(polls[_hash2].participants.length * 10);
     if (score1 == score2) {
-      return polls[_hash1].participants.length - polls[_hash2].participants.length;
+      if (polls[_hash1].participants.length > polls[_hash2].participants.length) {
+        return 1;
+      } else if (polls[_hash1].participants.length == polls[_hash2].participants.length) {
+        return 0;
+      } else {
+        return -1;
+      }
     } else {
-      return score1 - score2;
+      if (score1 > score2) {
+        return 1;
+      } else if (score1 == score2) {
+        return 0;
+      } else {
+        return -1;
+      }
     }
   }
 
@@ -406,28 +467,38 @@ contract FaceWorthPollFactory is Owned {
 
   function getStatus(bytes32 _hash) external view
   returns (
+    address creator_,
     uint commitTimeLapsed_,
     uint revealTimeLapsed_,
+    uint commitBlocksLeft_,
+    uint revealBlocksLeft_,
     uint8 currentStage_,
     uint participantCount_,
     uint revealCount_,
     uint totalWorth_
   )
   {
-    if (block.number >= polls[_hash].commitEndingBlock) commitTimeLapsed_ = 100;
-    else {
-      uint startingBlock = polls[_hash].startingBlock;
-      commitTimeLapsed_ = (block.number - startingBlock) * 100 / (polls[_hash].commitEndingBlock - startingBlock);
+    creator_ = polls[_hash].creator;
+    if (block.number >= polls[_hash].commitEndBlock) {
+      commitTimeLapsed_ = 100;
+      commitBlocksLeft_ = 0;
+    } else {
+      uint startBlock = polls[_hash].startBlock;
+      commitTimeLapsed_ = (block.number - startBlock) * 100 / (polls[_hash].commitEndBlock - startBlock);
+      commitBlocksLeft_ = polls[_hash].commitEndBlock - block.number;
     }
 
-    uint commitEndingBlock = polls[_hash].commitEndingBlock;
-    uint revealEndingBlock = polls[_hash].revealEndingBlock;
-    if (block.number < commitEndingBlock) {
+    uint commitEndBlock = polls[_hash].commitEndBlock;
+    uint revealEndBlock = polls[_hash].revealEndBlock;
+    if (block.number <= commitEndBlock) {
       revealTimeLapsed_ = 0;
-    } else if (block.number >= revealEndingBlock) {
+      revealBlocksLeft_ = revealEndBlock - block.number;
+    } else if (block.number >= revealEndBlock) {
       revealTimeLapsed_ = 100;
+      revealBlocksLeft_ = 0;
     } else {
-      revealTimeLapsed_ = (block.number - commitEndingBlock - 1) * 100 / (revealEndingBlock - commitEndingBlock - 1);
+      revealTimeLapsed_ = (block.number - commitEndBlock) * 100 / (revealEndBlock - commitEndBlock);
+      revealBlocksLeft_ = revealEndBlock - block.number;
     }
 
     currentStage_ = polls[_hash].currentStage;
@@ -440,23 +511,27 @@ contract FaceWorthPollFactory is Owned {
   }
 
   function getCommitTimeElapsed(bytes32 _hash) external view returns (uint) {
-    if (block.number >= polls[_hash].commitEndingBlock) return 100;
+    if (block.number >= polls[_hash].commitEndBlock) return 100;
     else {
-      uint startingBlock = polls[_hash].startingBlock;
-      return (block.number - startingBlock) * 100 / (polls[_hash].commitEndingBlock - startingBlock);
+      uint startBlock = polls[_hash].startBlock;
+      return (block.number - startBlock) * 100 / (polls[_hash].commitEndBlock - startBlock);
     }
   }
 
   function getRevealTimeElapsed(bytes32 _hash) external view returns (uint) {
-    uint commitEndingBlock = polls[_hash].commitEndingBlock;
-    uint revealEndingBlock = polls[_hash].revealEndingBlock;
-    if (block.number < commitEndingBlock) {
+    uint commitEndBlock = polls[_hash].commitEndBlock;
+    uint revealEndBlock = polls[_hash].revealEndBlock;
+    if (block.number <= commitEndBlock + 1) {
       return 0;
-    } else if (block.number >= revealEndingBlock) {
+    } else if (block.number >= revealEndBlock) {
       return 100;
     } else {
-      return (block.number - commitEndingBlock - 1) * 100 / (revealEndingBlock - commitEndingBlock - 1);
+      return (block.number - commitEndBlock) * 100 / (revealEndBlock - commitEndBlock);
     }
+  }
+
+  function getCurrentBlock() external view returns (uint) {
+    return block.number;
   }
 
   function getCurrentStage(bytes32 _hash) external view returns (uint8) {
@@ -482,7 +557,7 @@ contract FaceWorthPollFactory is Owned {
     return polls[_hash].winners.length;
   }
 
-  function getWinners(bytes32 _hash) external view returns (address[]) {
+  function getWinners(bytes32 _hash) external view returns (address[] memory) {
     require(polls[_hash].currentStage == ENDED);
     return polls[_hash].winners;
   }
@@ -598,4 +673,6 @@ contract FaceWorthPollFactory is Owned {
   event Reveal(bytes32 hash, address revealor, uint8 worth);
 
   event Win(bytes32 hash, address winner, uint8 worth);
+
+  event EarlyReveal(bytes32 hash, uint newRevealEndBlock, uint oldRevealEndBlock);
 }

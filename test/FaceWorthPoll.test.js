@@ -28,7 +28,7 @@ contract('FaceWorthPollFactory', async (accounts) => {
     let blocksBeforeReveal = 10; // min number of blocks
     let blocksBeforeEnd = 10;
     await factory.createFaceWorthPoll(faceHash, blocksBeforeReveal, blocksBeforeEnd);
-    let pollCount = await factory.pollCount();
+    let pollCount = await factory.getPollCount();
     assert.equal(pollCount, 1, "Poll count wasn't 1 after 1 poll is created");
 
     let approvalEvent = faceToken.Approval();
@@ -46,7 +46,7 @@ contract('FaceWorthPollFactory', async (accounts) => {
       assert.equal(response.args.creator, accounts[0], "Creator wasn't set correctly");
       let hash = response.args.hash;
       let stake = await factory.stake();
-      let score = [1, 2, 2, 3, 3, 3, 3, 3, 3, 4];
+      let score = [1, 2, 7, 3, 15, 6, 5, 8, 9, 4];
       for (let i = 0; i < accounts.length; i++) {
         let saltedWorthHash = '0x' + keccak256("中文-" + score[i]);
         await factory.commit(hash, saltedWorthHash, {from: accounts[i], value: stake});
