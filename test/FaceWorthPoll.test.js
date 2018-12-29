@@ -46,7 +46,7 @@ contract('FaceWorthPollFactory', async (accounts) => {
       assert.equal(response.args.creator, accounts[0], "Creator wasn't set correctly");
       let hash = response.args.hash;
       let stake = await factory.stake();
-      let score = [1, 2, 7, 3, 15, 6, 5, 8, 9, 4];
+      let score = [15, 9, 8, 6, 6, 6, 4, 3, 2, 1];
       for (let i = 0; i < accounts.length; i++) {
         let saltedWorthHash = '0x' + keccak256("中文-" + score[i]);
         await factory.commit(hash, saltedWorthHash, {from: accounts[i], value: stake});

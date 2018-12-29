@@ -266,6 +266,7 @@ contract FaceWorthPollFactory is Owned {
       emit Win(_hash, _sortedParticipants[_turningPoint], polls[_hash].worthBy[_sortedParticipants[_turningPoint]]);
       count++;
       rightIndex++;
+      if (leftIndex > 0) leftIndex--;
     } else {
       if (leftIndex > 0) leftIndex--;
       else rightIndex++;
