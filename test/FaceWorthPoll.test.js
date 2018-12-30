@@ -25,9 +25,8 @@ contract('FaceWorthPollFactory', async (accounts) => {
 
   it("FaceWorthPoll is created successfully", async () => {
     let faceHash = '0x' + keccak256("Some face photo");
-    let blocksBeforeReveal = 10; // min number of blocks
-    let blocksBeforeEnd = 10;
-    await factory.createFaceWorthPoll(faceHash, blocksBeforeReveal, blocksBeforeEnd);
+    let waitBlocks = 10; // min number of blocks
+    await factory.createFaceWorthPoll(faceHash, waitBlocks);
     let pollCount = await factory.getPollCount();
     assert.equal(pollCount, 1, "Poll count wasn't 1 after 1 poll is created");
 

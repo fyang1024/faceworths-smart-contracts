@@ -37,11 +37,10 @@ contract FaceWorthPollFactory is Owned {
   uint public oneFace;
   uint public stake = 10**18; // every participant stake 1 ETH
   uint public minParticipants = 3;
-  uint public maxParticipants = 618;
-  uint public winnersPerThousand = 382;   // 1000 * distPercentage / winnersPerThousand must be greater than 100,
+  uint public maxParticipants = 618; // this number affects distributePrize algorithm's effectiveness
+  uint public winnersPerThousand = 382; // 1000 * distPercentage / winnersPerThousand must be greater than 100,
   uint public distPercentage = 80; // so that winners prize is greater than the stake
-  uint public minBlocksBeforeReveal = 10; // 10 blocks is about 30 seconds
-  uint public minBlocksBeforeEnd = 10;
+  uint public minWaitBlocks = 10; // 10 blocks is about 30 seconds
   address public faceTokenAddress;
   uint256 public faceTokenRewardPool;
 
@@ -72,20 +71,18 @@ contract FaceWorthPollFactory is Owned {
 
   function createFaceWorthPoll(
     bytes32 _faceHash,
-    uint _blocksBeforeReveal,
-    uint _blocksBeforeEnd
+    uint _waitBlocks
   )
   public returns (bytes32)
   {
-    require(_blocksBeforeReveal >= minBlocksBeforeReveal);
-    require(_blocksBeforeEnd >= minBlocksBeforeEnd);
+    require(_waitBlocks >= minWaitBlocks);
 
     bytes32 hash = keccak256(abi.encodePacked(msg.sender, _faceHash, block.number));
     polls[hash].creator = msg.sender;
     polls[hash].faceHash = _faceHash;
     polls[hash].startBlock = block.number;
-    polls[hash].commitEndBlock = block.number + _blocksBeforeReveal;
-    polls[hash].revealEndBlock = polls[hash].commitEndBlock + _blocksBeforeEnd;
+    polls[hash].commitEndBlock = block.number + _waitBlocks;
+    polls[hash].revealEndBlock = polls[hash].commitEndBlock + _waitBlocks;
     polls[hash].currentStage = COMMITTING;
     pollHashes.push(hash);
 
@@ -147,7 +144,6 @@ contract FaceWorthPollFactory is Owned {
     refund(_hash);
   }
 
-  // this function should be called every 3 seconds (Tron block time)
   function checkBlockNumber(bytes32 _hash) external {
     uint8 stage = polls[_hash].currentStage;
     if (stage != CANCELLED && stage != ENDED && stage != TIMEOUT) {
@@ -468,67 +464,26 @@ contract FaceWorthPollFactory is Owned {
 
   function getStatus(bytes32 _hash) external view
   returns (
-    address creator_,
-    uint commitTimeLapsed_,
-    uint revealTimeLapsed_,
-    uint commitBlocksLeft_,
-    uint revealBlocksLeft_,
-    uint8 currentStage_,
-    uint participantCount_,
-    uint revealCount_,
-    uint totalWorth_
+    address creator,
+    uint startBlock,
+    uint commitEndBlock,
+    uint revealEndBlock,
+    uint currentBlock,
+    uint8 currentStage,
+    uint participantCount,
+    uint revealCount,
+    uint totalWorth
   )
   {
-    creator_ = polls[_hash].creator;
-    if (block.number >= polls[_hash].commitEndBlock) {
-      commitTimeLapsed_ = 100;
-      commitBlocksLeft_ = 0;
-    } else {
-      uint startBlock = polls[_hash].startBlock;
-      commitTimeLapsed_ = (block.number - startBlock) * 100 / (polls[_hash].commitEndBlock - startBlock);
-      commitBlocksLeft_ = polls[_hash].commitEndBlock - block.number;
-    }
-
-    uint commitEndBlock = polls[_hash].commitEndBlock;
-    uint revealEndBlock = polls[_hash].revealEndBlock;
-    if (block.number <= commitEndBlock) {
-      revealTimeLapsed_ = 0;
-      revealBlocksLeft_ = revealEndBlock - block.number;
-    } else if (block.number >= revealEndBlock) {
-      revealTimeLapsed_ = 100;
-      revealBlocksLeft_ = 0;
-    } else {
-      revealTimeLapsed_ = (block.number - commitEndBlock) * 100 / (revealEndBlock - commitEndBlock);
-      revealBlocksLeft_ = revealEndBlock - block.number;
-    }
-
-    currentStage_ = polls[_hash].currentStage;
-
-    participantCount_ = polls[_hash].participants.length;
-
-    revealCount_ = polls[_hash].revealCount;
-
-    totalWorth_ = polls[_hash].totalWorth;
-  }
-
-  function getCommitTimeElapsed(bytes32 _hash) external view returns (uint) {
-    if (block.number >= polls[_hash].commitEndBlock) return 100;
-    else {
-      uint startBlock = polls[_hash].startBlock;
-      return (block.number - startBlock) * 100 / (polls[_hash].commitEndBlock - startBlock);
-    }
-  }
-
-  function getRevealTimeElapsed(bytes32 _hash) external view returns (uint) {
-    uint commitEndBlock = polls[_hash].commitEndBlock;
-    uint revealEndBlock = polls[_hash].revealEndBlock;
-    if (block.number <= commitEndBlock + 1) {
-      return 0;
-    } else if (block.number >= revealEndBlock) {
-      return 100;
-    } else {
-      return (block.number - commitEndBlock) * 100 / (revealEndBlock - commitEndBlock);
-    }
+    creator = polls[_hash].creator;
+    startBlock = polls[_hash].startBlock;
+    commitEndBlock = polls[_hash].commitEndBlock;
+    revealEndBlock = polls[_hash].revealEndBlock;
+    currentBlock = block.number;
+    currentStage = polls[_hash].currentStage;
+    participantCount = polls[_hash].participants.length;
+    revealCount = polls[_hash].revealCount;
+    totalWorth = polls[_hash].totalWorth;
   }
 
   function getCurrentBlock() external view returns (uint) {
@@ -598,22 +553,6 @@ contract FaceWorthPollFactory is Owned {
     emit StakeUpdate(stake, oldStake);
   }
 
-  function updateParticipantsRange(uint _minParticipants, uint _maxParticipants) external onlyOwner {
-    require(_minParticipants <= _maxParticipants);
-    require(_minParticipants != minParticipants || _maxParticipants != maxParticipants);
-
-    if (_minParticipants != minParticipants) {
-      uint oldMinParticipants = minParticipants;
-      minParticipants = _minParticipants;
-      emit MinParticipantsUpdate(minParticipants, oldMinParticipants);
-    }
-    if (_maxParticipants != maxParticipants) {
-      uint oldMaxParticipants = maxParticipants;
-      maxParticipants = _maxParticipants;
-      emit MaxParticipantsUpdate(maxParticipants, oldMaxParticipants);
-    }
-  }
-
   function updateRewardRatios(uint _winnersPerThousand, uint _distPercentage) external onlyOwner {
     require(_distPercentage <= 100);
     require(_winnersPerThousand < 1000);
@@ -632,18 +571,11 @@ contract FaceWorthPollFactory is Owned {
     }
   }
 
-  function updateMinBlocksBeforeReveal(uint _minBlocksBeforeReveal) external onlyOwner {
-    require(_minBlocksBeforeReveal != minBlocksBeforeReveal);
-    uint oldMinBlocksBeforeReveal = minBlocksBeforeReveal;
-    minBlocksBeforeReveal = _minBlocksBeforeReveal;
-    emit MinBlocksBeforeRevealUpdate(minBlocksBeforeReveal, oldMinBlocksBeforeReveal);
-  }
-
-  function updateMinBlocksBeforeEnd(uint _minBlocksBeforeEnd) external onlyOwner {
-    require(_minBlocksBeforeEnd != minBlocksBeforeEnd);
-    uint oldMinBlocksBeforeEnd = minBlocksBeforeEnd;
-    minBlocksBeforeEnd = _minBlocksBeforeEnd;
-    emit MinBlocksBeforeEndUpdate(minBlocksBeforeEnd, oldMinBlocksBeforeEnd);
+  function updateMinWaitBlocks(uint _minWaitBlocks) external onlyOwner {
+    require(_minWaitBlocks != minWaitBlocks);
+    uint oldMinWaitBlocks = minWaitBlocks;
+    minWaitBlocks = _minWaitBlocks;
+    emit MinWaitBlocksUpdate(minWaitBlocks, oldMinWaitBlocks);
   }
 
   function withdraw(uint _amount) external onlyOwner {
@@ -653,17 +585,11 @@ contract FaceWorthPollFactory is Owned {
 
   event StakeUpdate(uint newStake, uint oldStake);
 
-  event MinParticipantsUpdate(uint newMinParticipants, uint oldMinParticipants);
-
-  event MaxParticipantsUpdate(uint newMaxParticipants, uint oldMaxParticipants);
-
   event RewardRatiosUpdate(uint newWinnersPerThousand, uint oldWinnersPerThousand);
 
   event DistPercentageUpdate(uint newDistPercentage, uint oldDistPercentage);
 
-  event MinBlocksBeforeRevealUpdate(uint newMinBlocksBeforeReveal, uint oldMinBlocksBeforeReveal);
-
-  event MinBlocksBeforeEndUpdate(uint newMinBlocksBeforeUpdate, uint oldMinBlocksBeforeUpdate);
+  event MinWaitBlocksUpdate(uint newMinWaitBlocks, uint oldMinWaitBlocks);
 
   event StageChange(bytes32 hash, uint8 newStage, uint8 oldStage, uint blockNumber);
 
